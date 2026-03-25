@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU — Academic Audit Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #030308;
+            --surface: #0a0a14;
+            --border: #1a1a2e;
+            --accent: #00e5cc;
+            --accent-dim: rgba(0, 229, 204, 0.1);
+            --text-main: #e0e6ed;
+            --text-dim: #71768a;
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { margin: 0; box-sizing: border-box; }
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 60px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+        }
+
+        header {
+            margin-bottom: 50px;
+            border-left: 3px solid var(--accent);
+            padding-left: 24px;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            color: var(--text-dim);
+            max-width: 600px;
+            line-height: 1.5;
+        }
+
+        .mcp-info {
+            display: inline-block;
+            margin-top: 16px;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            color: var(--accent);
+            background: var(--accent-dim);
+            padding: 4px 12px;
+            border-radius: 4px;
+            letter-spacing: 0.05em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 2px;
+            background: linear-gradient(90deg, var(--accent), transparent);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .card-desc {
+            font-size: 0.82rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        .card-meta {
+            margin-top: auto;
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .category-tag {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            margin-bottom: -4px;
+        }
+
+        footer {
+            margin-top: 80px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-footer {
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-main);
+        }
+
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Hypercube GPU Audit Hub</h1>
+            <p class="subtitle">Unified visualization and validation interface for SOTA mother-models and scientific kernels.</p>
+            <div style="display: flex; gap: 10px; margin-top: 16px;">
+                <div class="mcp-info">SYSTEM STATUS: FULLY ACCESSIBLE</div>
+                <a href="scientific_audit.html" style="text-decoration: none;"><div class="mcp-info" style="background: #222; border: 1px solid var(--accent);">RUN FULL SCIENTIFIC AUDIT</div></a>
+                <a href="benchmark.html" style="text-decoration: none;"><div class="mcp-info" style="background: #222; border: 1px solid var(--accent);">HW BENCHMARK (MLUPS)</div></a>
+            </div>
+        </header>
+
+        <h2 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px; letter-spacing: 0.1em; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Physics & Mother-Models</h2>
+
+        <div class="grid">
+            <!-- TENSOR CP VERIFY -->
+            <a href="tensor_cp_verify.html" class="card">
+                <span class="category-tag">DATA SCIENCE</span>
+                <span class="card-title">Tensor CP (Lite)</span>
+                <p class="card-desc">Mathematic validation of Khatri-Rao products and ALS convergence on GPU-ready layouts.</p>
+                <div class="card-meta"><span>STABLE</span><span>CPU/REF</span></div>
+            </a>
+
+            <!-- TENSOR CP PRO -->
+            <a href="tensor-cp/index.html" class="card" style="border-color: var(--accent2);">
+                <span class="category-tag" style="color: var(--accent2);">PRO SERVICE</span>
+                <span class="card-title" style="color: var(--accent2);">Tensor-CP Pro</span>
+                <p class="card-desc">Advanced decomposition suite with Auto-Rank search, CORCONDIA diagnostics, and TNS import.</p>
+                <div class="card-meta"><span style="color: #f39c12;">PREMIUM</span><span>V3.0-PRO</span></div>
+            </a>
+
+            <!-- LBM -->
+            <a href="lbm_2d_verify.html" class="card">
+                <span class="category-tag">FLUID DYNAMICS</span>
+                <span class="card-title">LBM 2D Simulation</span>
+                <p class="card-desc">Lattice Boltzmann Method for real-time aerodynamic flow audit. Collision-streaming operator diagnostics.</p>
+                <div class="card-meta"><span>CORE</span><span>SIM</span></div>
+            </a>
+
+            <!-- FDTD -->
+            <a href="fdtd_maxwell_verify.html" class="card">
+                <span class="category-tag">ELECTROMAGNETISM</span>
+                <span class="card-title">FDTD Maxwell</span>
+                <p class="card-desc">Finite-Difference Time-Domain Maxwell solver. Verification of wave propagation and boundary conditions (ABC).</p>
+                <div class="card-meta"><span>PHYSICS</span><span>Maxwell</span></div>
+            </a>
+
+            <!-- POISSON -->
+            <a href="poisson_solver_verify.html" class="card">
+                <span class="category-tag">NUMERICAL MATH</span>
+                <span class="card-title">Poisson Solver</span>
+                <p class="card-desc">Heat equation and pressure field resolution using iterative GPU kernels.</p>
+                <div class="card-meta"><span>SOLVER</span><span>LAPLACE</span></div>
+            </a>
+
+            <!-- JFA -->
+            <a href="jfa_distance_verify.html" class="card">
+                <span class="category-tag">COMPUTER VISION</span>
+                <span class="card-title">JFA Distance Field</span>
+                <p class="card-desc">Jump Flooding Algorithm for O(log N) distance transform and voronoi field generation.</p>
+                <div class="card-meta"><span>GEOMETRY</span><span>GPU</span></div>
+            </a>
+
+            <!-- WAVE -->
+            <a href="wave_2d_verify.html" class="card">
+                <span class="category-tag">PHYSICS</span>
+                <span class="card-title">Wave Equation 2D</span>
+                <p class="card-desc">Standard wave propagation solver with reflection and refraction diagnostics.</p>
+                <div class="card-meta"><span>WAVE</span><span>2D</span></div>
+            </a>
+
+            <!-- MATH -->
+            <a href="function_math_verify.html" class="card">
+                <span class="category-tag">CORE UTILS</span>
+                <span class="card-title">Math Function Audit</span>
+                <p class="card-desc">Verification of transcendental functions and GPU precision for scientific operations.</p>
+                <div class="card-meta"><span>PRECISION</span><span>STD</span></div>
+            </a>
+
+            <!-- CELLULAR -->
+            <a href="cellular_life_verify.html" class="card">
+                <span class="category-tag">BIOLOGY</span>
+                <span class="card-title">Cellular Life</span>
+                <p class="card-desc">Evaluation of parallel state-transition kernels for emergent biological systems.</p>
+                <div class="card-meta"><span>SYSTEMS</span><span>COMPLEXITY</span></div>
+            </a>
+
+            <!-- MANDELBULB -->
+            <a href="mandelbulb_3d_verify.html" class="card">
+                <span class="category-tag">FRACTALS</span>
+                <span class="card-title">Mandelbulb 3D</span>
+                <p class="card-desc">Ray-marching validation for 3rd-order recursive analytical structures.</p>
+                <div class="card-meta"><span>RENDER</span><span>3D</span></div>
+            </a>
+
+            <!-- DIFFUSION -->
+            <a href="diffusion_heat_verify.html" class="card">
+                <span class="category-tag">THERMODYNAMICS</span>
+                <span class="card-title">Diffusion / Heat</span>
+                <p class="card-desc">Heat transfer simulation for validation of isotropic diffusion operators.</p>
+                <div class="card-meta"><span>THERMAL</span><span>2D</span></div>
+            </a>
+
+            <!-- NOISE -->
+            <a href="noise_procedural_verify.html" class="card">
+                <span class="category-tag">SYNTHESIS</span>
+                <span class="card-title">Procedural Noise</span>
+                <p class="card-desc">GPU implementation audit for fast Simplex and Perlin noise distributions.</p>
+                <div class="card-meta"><span>RANDOM</span><span>GPU</span></div>
+            </a>
+        </div>
+
+        <h2 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-dim); margin-top: 40px; margin-bottom: 12px; letter-spacing: 0.1em; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Hardware & Alignment Audits</h2>
+        
+        <div class="grid">
+            <!-- DISPATCHER ALIGNMENT -->
+            <a href="dispatcher_alignment_verify.html" class="card">
+                <span class="category-tag">ENGINE CORE</span>
+                <span class="card-title">Dispatcher Alignment</span>
+                <p class="card-desc">Verification of memory alignment and bitwise parity transitions in GpuDispatcher.</p>
+                <div class="card-meta"><span>STABLE</span><span>CORE</span></div>
+            </a>
+
+            <!-- BEACON ALIGNMENT -->
+            <a href="beacon_alignment_verify.html" class="card">
+                <span class="category-tag">ENGINE CORE</span>
+                <span class="card-title">Beacon Audit</span>
+                <p class="card-desc">Low-level verification of data injection and retrieval across 512x128 grid buffers.</p>
+                <div class="card-meta"><span>STABLE</span><span>CORE</span></div>
+            </a>
+        </div>
+
+        <footer>
+            <div class="logo-footer">Hypercube Neo Core</div>
+            <div>Scientific GPU Framework — v4.7.0 r.2026</div>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-03-24T17:55:32.503Z",
+  "gpu": "Detected via WebGPU",
+  "results": {
+    "fdtd": {
+      "energy_drift": 1.2e-9,
+      "status": "PASS"
+    },
+    "tensor_cp": {
+      "residual": 0.0000054,
+      "status": "PASS"
+    },
+    "lbm": {
+      "drag_coefficient_cd": 3.1994,
+      "strouhal_number_st": 0.176,
+      "performance_mlups": 937,
+      "status": "PASS"
+    }
+  }
+}

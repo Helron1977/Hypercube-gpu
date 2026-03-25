@@ -1,0 +1,20 @@
+{
+  "config": {
+    "dimensions": { "nx": 256, "ny": 256, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "wall" } },
+    "engine": "cellular-verify",
+    "params": { "birthMin": 3.0, "birthMax": 3.0, "survivalMin": 2.0, "survivalMax": 3.0 }
+  },
+  "engine": {
+    "name": "cellular-verify",
+    "version": "1.0",
+    "requirements": { "ghostCells": 1, "pingPong": true },
+    "faces": [
+      { "name": "s", "type": "scalar", "isSynchronized": true }
+    ],
+    "rules": [
+      { "type": "CellularCore", "source": "/src/kernels/wgsl/CellularCore.wgsl", "faces": ["s.read", "s.write"] }
+    ]
+  }
+}

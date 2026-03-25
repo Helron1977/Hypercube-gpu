@@ -1,0 +1,26 @@
+{
+  "config": {
+    "dimensions": { "nx": 16, "ny": 16, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "wall" } },
+    "engine": "tensor-cp-verify",
+    "params": { "rank": 4.0, "K": 10.0, "lr": 0.001 }
+  },
+  "engine": {
+    "name": "tensor-cp-verify",
+    "version": "2.0",
+    "requirements": { "ghostCells": 1, "pingPong": false },
+    "faces": [
+      { "name": "A",      "type": "scalar", "isSynchronized": false },
+      { "name": "B",      "type": "scalar", "isSynchronized": false },
+      { "name": "C",      "type": "scalar", "isSynchronized": false },
+      { "name": "T_hat",  "type": "scalar", "isSynchronized": true  },
+      { "name": "T_obs",  "type": "scalar", "isSynchronized": false },
+      { "name": "loss",   "type": "scalar", "isSynchronized": true  }
+    ],
+    "rules": [
+      { "type": "TensorCpReconstruct", "source": "/src/kernels/wgsl/TensorCpReconstruct.wgsl" },
+      { "type": "TensorCpGradUpdate",  "source": "/src/kernels/wgsl/TensorCpGradUpdate.wgsl"  }
+    ]
+  }
+}

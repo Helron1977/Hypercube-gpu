@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head><title>Hypercube - Beacon Alignment Audit</title></head>
+<body style="background: #050508; color: #eee; font-family: monospace; padding: 20px;">
+    <h1>🚀 BEACON ALIGNMENT AUDIT</h1>
+    <pre id="log"></pre>
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { HypercubeGPUContext } from '/src/gpu/HypercubeGPUContext.ts';
+
+        const log = (m) => { document.getElementById('log').innerText += m + '\n'; console.log(m); };
+
+        async function runAudit() {
+            try {
+                log("Starting Beacon Audit (512x128 grid)...");
+                if (!await HypercubeGPUContext.init()) throw new Error("WebGPU Fail");
+
+                const NX = 512, NY = 128;
+                const BEACON_WGSL = `
+                struct Params {
+                    nx: u32, ny: u32, lx: u32, ly: u32,
+                    t: f32, tick: u32, strideFace: u32, numFaces: u32,
+                    p0: f32, p1: f32, p2: f32, p3: f32, p4: f32, p5: f32, p6: f32, p7: f32,
+                    f0: u32, f1: u32, f2: u32, f3: u32, f4: u32, f5: u32
+                };
+                @group(0) @binding(0) var<storage, read_write> data: array<f32>;
+                @group(0) @binding(1) var<uniform> params: Params;
+
+                @compute @workgroup_size(16, 16)
+                fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+                    if (id.x >= params.nx || id.y >= params.ny) { return; }
+                    let px = id.x + 1u; let py = id.y + 1u;
+                    let i = py * params.lx + px;
+                    
+                    // INJECT BEACON EVERY 100 PIXELS
+                    if (i % 100u == 0u) {
+                        let marker = 1000000.0 + f32(i);
+                        data[params.f4 * params.strideFace + i] = marker; 
+                    }
+                }
+                `;
+
+                const factory = new GpuCoreFactory();
+                const engine = await factory.build({
+                    dimensions: { nx: NX, ny: NY, nz: 1 },
+                    chunks: { x: 1, y: 1 },
+                    boundaries: {},
+                    engine: 'beacon',
+                    params: {}
+                }, {
+                    name: 'beacon',
+                    faces: [
+                        { name: 'f0', type: 'scalar', isSynchronized: true },
+                        { name: 'f1', type: 'scalar', isSynchronized: true },
+                        { name: 'f2', type: 'scalar', isSynchronized: true },
+                        { name: 'f3', type: 'scalar', isSynchronized: true },
+                        { name: 'curl', type: 'scalar', isSynchronized: true },
+                        { name: 'f_pp', type: 'population', isSynchronized: true, isPingPong: true }
+                    ],
+                    rules: [{ type: 'beacon', source: BEACON_WGSL, params: {} }],
+                    requirements: { ghostCells: 1, pingPong: true }
+                });
+
+                log(`✓ Engine built. strideRow=${engine.buffer.layout.strideRow}, strideFace=${engine.buffer.strideFace}`);
+
+                await engine.step({ beacon: BEACON_WGSL });
+                await engine.syncFacesToHost(['curl']);
+                
+                const curlData = engine.getFaceData('chunk_0_0_0', 'curl');
+                const strideRow = engine.buffer.layout.strideRow;
+                
+                log("Scanning 'curl' face for beacons...");
+                let found = 0, errors = 0;
+                
+                for (let y = 0; y < NY; y++) {
+                    for (let x = 0; x < NX; x++) {
+                        const px = x + 1, py = y + 1;
+                        const i = py * strideRow + px;
+                        if (i % 100 === 0) {
+                            const expected = 1000000.0 + i;
+                            const actual = curlData[i];
+                            if (Math.abs(actual - expected) < 0.1) {
+                                found++;
+                            } else {
+                                if (errors < 5) log(`❌ MISMATCH at y=${y}, x=${x} (i=${i}): Exp=${expected}, Got=${actual}`);
+                                errors++;
+                            }
+                        }
+                    }
+                }
+
+                if (found > 0 && errors === 0) {
+                    log(`⭐ SUCCESS: Found ${found} beacons with 100% accuracy!`);
+                } else {
+                    log(`❌ FAILURE: Found ${found} beacons, but ${errors} mismatches.`);
+                }
+
+            } catch (err) {
+                log("❌ ERROR: " + err.message);
+            } finally {
+                // Pipe result back to the Node CLI Helper (WebMCP Bridge)
+                try {
+                    await fetch('http://localhost:3000', {
+                        method: 'POST',
+                        headers: { 'X-Test-Name': 'beacon-alignment' },
+                        body: document.getElementById('log').innerText
+                    });
+                } catch (e) {}
+                
+                const mark = document.createElement('div');
+                mark.id = "validation-done";
+                document.body.appendChild(mark);
+            }
+        }
+
+        runAudit();
+    </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "config": {
+    "dimensions": { "nx": 128, "ny": 128, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "dirichlet" } },
+    "engine": "poisson-verify",
+    "params": { "dx": 1.0 }
+  },
+  "engine": {
+    "name": "poisson-verify",
+    "version": "1.0",
+    "requirements": { "ghostCells": 1, "pingPong": true },
+    "faces": [
+      { "name": "phi", "type": "field", "isSynchronized": true },
+      { "name": "rhs", "type": "field", "isSynchronized": false }
+    ],
+    "rules": [
+      { "type": "PoissonCore", "source": "/src/kernels/wgsl/PoissonCore.wgsl", "faces": ["phi.read", "phi.write", "rhs"] }
+    ]
+  }
+}

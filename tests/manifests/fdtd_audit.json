@@ -1,0 +1,22 @@
+{
+  "config": {
+    "dimensions": { "nx": 128, "ny": 128, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "absorbing" } },
+    "engine": "fdtd-verify",
+    "params": { "dt_eps": 0.05, "dt_mu": 0.5, "_pad": 0, "srcX": 64, "srcY": 64, "srcVal": 0 }
+  },
+  "engine": {
+    "name": "fdtd-verify",
+    "requirements": { "ghostCells": 1, "pingPong": false },
+    "faces": [
+      { "name": "Ez", "type": "field", "isSynchronized": true },
+      { "name": "Hx", "type": "field", "isSynchronized": true },
+      { "name": "Hy", "type": "field", "isSynchronized": true }
+    ],
+    "rules": [
+      { "type": "FdtdUpdateE", "source": "/src/kernels/wgsl/FdtdUpdateE.wgsl", "faces": ["Ez", "Hx", "Hy"] },
+      { "type": "FdtdUpdateH", "source": "/src/kernels/wgsl/FdtdUpdateH.wgsl", "faces": ["Ez", "Hx", "Hy"] }
+    ]
+  }
+}

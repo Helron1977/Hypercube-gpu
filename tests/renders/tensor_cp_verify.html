@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU — Tensor-CP Decomposition (ALS)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #04040a; --surface: #08080f; --border: #1a1a30;
+            --accent: #00e5cc; --accent2: #7b5ea7; --warn: #ff6b6b;
+            --text: #c8d0e0; --text-dim: #4a5070;
+        }
+        * { margin: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: 'Inter', system-ui, sans-serif;
+            display: grid;
+            grid-template-columns: 270px 1fr 310px;
+            grid-template-rows: 52px 1fr;
+            height: 100vh; overflow: hidden;
+        }
+        header {
+            grid-column: 1/-1; background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 24px; gap: 14px;
+        }
+        header h1 { font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); }
+        .badge { font-size: 0.6rem; font-weight: 800; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.08em; }
+        .badge-sota { background: #00e5cc18; color: var(--accent); border: 1px solid #00e5cc30; }
+        .badge-als  { background: #7b5ea718; color: #a28ad1; border: 1px solid #7b5ea760; box-shadow: 0 0 10px #7b5ea720; }
+        .hdr-status { margin-left: auto; font-family: monospace; font-size: 0.72rem; color: var(--text-dim); }
+        #statusBadge { color: var(--accent); font-weight: 800; }
+
+        /* ─── LEFT ─── */
+        .left-panel {
+            background: var(--surface); border-right: 1px solid var(--border);
+            padding: 18px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;
+        }
+        .section-title {
+            font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.12em;
+            font-weight: 800; color: var(--text-dim); border-bottom: 1px solid var(--border); padding-bottom: 6px;
+        }
+        .ctrl { display: flex; flex-direction: column; gap: 4px; }
+        label { font-size: 0.65rem; color: var(--text-dim); font-weight: 700; display: flex; justify-content: space-between; }
+        label span { color: var(--accent); font-family: monospace; }
+        input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+        input[type="file"] { display: none; }
+        .file-btn {
+            background: transparent; border: 1px dashed #3a3a60;
+            color: var(--text-dim); padding: 9px; border-radius: 6px;
+            font-size: 0.68rem; cursor: pointer; text-align: center; transition: all 0.2s; width: 100%;
+        }
+        .file-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #00b5a0);
+            color: #04040a; border: none; padding: 12px; border-radius: 8px;
+            font-weight: 900; cursor: pointer; font-size: 0.78rem; letter-spacing: 0.1em;
+            text-transform: uppercase; transition: all 0.2s; width: 100%;
+        }
+        .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .btn-secondary {
+            background: transparent; border: 1px solid var(--accent2); color: var(--accent2);
+            padding: 9px; border-radius: 8px; font-weight: 700; cursor: pointer;
+            font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; transition: all 0.2s; width: 100%;
+        }
+        .btn-secondary:hover { background: #7b5ea718; }
+        #log {
+            font-size: 0.57rem; font-family: monospace; color: var(--text-dim);
+            max-height: 110px; overflow-y: auto; line-height: 1.7;
+            background: #06060e; border-radius: 4px; padding: 6px;
+        }
+        #log .ok  { color: var(--accent); }
+        #log .err { color: var(--warn); }
+        #log .info{ color: #888; }
+
+        /* ─── CENTER ─── */
+        .center { display: grid; grid-template-rows: 1fr auto; overflow: hidden; }
+
+        .viz-section {
+            padding: 18px; display: flex; flex-direction: column; gap: 10px;
+            border-bottom: 1px solid var(--border); overflow: hidden;
+        }
+        .viz-section h2 { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+        .canvas-wrapper { flex: 1; display: flex; align-items: center; justify-content: center; gap: 20px; }
+        .canvas-group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .canvas-label { font-size: 0.6rem; color: var(--text-dim); font-family: monospace; }
+        canvas.heatmap { border-radius: 4px; image-rendering: pixelated; border: 1px solid var(--border); }
+
+        .slice-ctrl { display: flex; align-items: center; gap: 10px; }
+        .slice-ctrl span { font-size: 0.65rem; color: var(--text-dim); }
+        .slice-ctrl input { accent-color: var(--accent); width: 120px; }
+        #vSliceK { font-family: monospace; color: var(--accent); font-size: 0.72rem; }
+
+        /* Factor table */
+        .factor-section { padding: 14px 18px; overflow-x: auto; }
+        .factor-section h2 { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 10px; }
+        .tables-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 0.6rem; }
+        th { color: var(--accent2); text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--border); font-weight: 700; }
+        td { padding: 2px 6px; color: var(--text); border-bottom: 1px solid #0a0a18; white-space: nowrap; }
+        tr:hover td { background: #0e0e20; }
+        .factor-name { font-size: 0.6rem; color: var(--text-dim); font-weight: 700; margin-bottom: 4px; }
+
+        /* ─── RIGHT ─── */
+        .right-panel {
+            background: var(--surface); border-left: 1px solid var(--border);
+            display: grid; grid-template-rows: 1fr auto; overflow: hidden;
+        }
+        .chart-section { padding: 18px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+        .chart-section h2 { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+        .chart-wrapper { flex: 1; min-height: 0; position: relative; }
+        .metrics { border-top: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 7px; }
+        .metric-row { display: flex; justify-content: space-between; font-size: 0.68rem; align-items: baseline; }
+        .metric-label { color: var(--text-dim); }
+        .metric-val { font-family: monospace; color: var(--accent); font-weight: 800; font-size: 0.82rem; }
+        .metric-val.good { color: #22dd88; }
+        .metric-val.mid  { color: #ffcc44; }
+        .metric-val.bad  { color: var(--warn); }
+    </style>
+</head>
+<body>
+<header>
+    <h1>TENSOR-CP — ALS DECOMPOSITION</h1>
+    <span class="badge badge-sota">SOTA ML</span>
+    <span class="badge badge-als">TRUE ALS</span>
+    <span class="hdr-status">STATUS: <span id="statusBadge">IDLE</span></span>
+</header>
+
+<!-- LEFT -->
+<aside class="left-panel">
+    <div class="section-title">Data Source</div>
+    <label for="fileInput" class="file-btn" id="fileBtnLabel">📂 Upload CSV or .TNS (FROSTT)</label>
+    <input type="file" id="fileInput" accept=".csv,.tns,.txt">
+    <div style="font-size: 0.58rem; color: var(--text-dim); margin-top: -10px; text-align: center; margin-bottom: 4px;">
+        <a href="http://frostt.io/tensors/" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: bold;">[ Get Standard Datasets @ FROSTT.io ]</a>
+    </div>
+    <button class="btn-secondary" id="btnDemo">▷ USE SYNTHETIC DEMO TENSOR</button>
+    <button class="btn-secondary" id="btnMovieLens" style="margin-top:4px; border-color: #f39c12; color: #f39c12;">▷ BENCHMARK: MOVIELENS TAGS</button>
+
+
+    <div class="section-title">Tensor Dimensions</div>
+    <div class="ctrl">
+        <label>I (mode-1) <span id="vI">10</span></label>
+        <input type="range" id="pI" min="3" max="20" step="1" value="10">
+    </div>
+    <div class="ctrl">
+        <label>J (mode-2) <span id="vJ">10</span></label>
+        <input type="range" id="pJ" min="3" max="20" step="1" value="10">
+    </div>
+    <div class="ctrl">
+        <label>K (mode-3) <span id="vK">10</span></label>
+        <input type="range" id="pK" min="3" max="20" step="1" value="10">
+    </div>
+
+    <div class="section-title">ALS Parameters</div>
+    <div class="ctrl">
+        <label>Rank R <span id="vR">4</span></label>
+        <input type="range" id="pR" min="1" max="12" step="1" value="4">
+    </div>
+    <div class="ctrl">
+        <label>Max Iterations <span id="vIter">100</span></label>
+        <input type="range" id="pIter" min="5" max="500" step="5" value="100">
+    </div>
+    <div class="ctrl">
+        <label>Tikhonov λ (reg.) <span id="vLambda">1e-6</span></label>
+        <input type="range" id="pLambda" min="-10" max="-2" step="0.5" value="-6">
+    </div>
+
+    <button class="btn-primary" id="btnRun" disabled>▶ RUN ALS</button>
+    <button class="btn-secondary" id="btnStop" style="display:none">⏹ STOP</button>
+    <button class="btn-secondary" id="btnExport" style="display:none; margin-top:8px;">💾 EXPORT FACTORS (JSON)</button>
+
+    <div class="section-title">Log</div>
+    <div id="log"><span class="ok">Ready. Load CSV or click Demo.</span></div>
+</aside>
+
+<!-- CENTER -->
+<main class="center">
+    <section class="viz-section">
+        <h2>K-Slice Heatmap — Observed vs Reconstructed</h2>
+        <div class="canvas-wrapper">
+            <div class="canvas-group">
+                <canvas id="canvasObs" class="heatmap" width="200" height="200" style="width:200px;height:200px"></canvas>
+                <span class="canvas-label">T_observed</span>
+            </div>
+            <div class="canvas-group">
+                <canvas id="canvasRec" class="heatmap" width="200" height="200" style="width:200px;height:200px"></canvas>
+                <span class="canvas-label">T_reconstructed (ALS)</span>
+            </div>
+            <div class="canvas-group">
+                <canvas id="canvasErr" class="heatmap" width="200" height="200" style="width:200px;height:200px"></canvas>
+                <span class="canvas-label">|residual|</span>
+            </div>
+        </div>
+        <div class="slice-ctrl">
+            <span>K-Slice:</span>
+            <input type="range" id="pSliceK" min="0" max="9" step="1" value="0">
+            <span id="vSliceK">k=0</span>
+        </div>
+    </section>
+
+    <section class="factor-section">
+        <h2>Factor Matrices A · B · C — After ALS (up to 8 rows)</h2>
+        <div class="tables-grid">
+            <div>
+                <div class="factor-name">A [ I × R ]</div>
+                <table><thead><tr id="headA"></tr></thead><tbody id="bodyA"></tbody></table>
+            </div>
+            <div>
+                <div class="factor-name">B [ J × R ]</div>
+                <table><thead><tr id="headB"></tr></thead><tbody id="bodyB"></tbody></table>
+            </div>
+            <div>
+                <div class="factor-name">C [ K × R ]</div>
+                <table><thead><tr id="headC"></tr></thead><tbody id="bodyC"></tbody></table>
+            </div>
+        </div>
+    </section>
+</main>
+
+<!-- RIGHT -->
+<aside class="right-panel">
+    <div class="chart-section">
+        <h2>Loss Descent — ||T − T̂||²_F</h2>
+        <div class="chart-wrapper">
+            <canvas id="chartLoss"></canvas>
+        </div>
+    </div>
+    <div class="metrics">
+        <div class="metric-row"><span class="metric-label">Iteration</span><span class="metric-val" id="mIter">—</span></div>
+        <div class="metric-row"><span class="metric-label">Frobenius Loss</span><span class="metric-val" id="mLoss">—</span></div>
+        <div class="metric-row"><span class="metric-label">Relative Error</span><span class="metric-val" id="mRel">—</span></div>
+        <div class="metric-row"><span class="metric-label">Algorithm</span><span class="metric-val" style="color:var(--accent2)">ALS + Tikhonov</span></div>
+    </div>
+</aside>
+
+<script type="module">
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITY
+// ─────────────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const log = (msg, cls='info') => {
+    const el = $('log');
+    const d = document.createElement('div');
+    d.className = cls; d.textContent = msg;
+    el.appendChild(d); el.scrollTop = 1e9;
+};
+
+// Link sliders to display
+[['pI','vI'],['pJ','vJ'],['pK','vK'],['pR','vR'],['pIter','vIter']].forEach(([slid, disp]) =>
+    $(slid).addEventListener('input', () => $(disp).textContent = $(slid).value));
+$('pLambda').addEventListener('input', () => {
+    $('vLambda').textContent = Math.pow(10, parseFloat($('pLambda').value)).toExponential(0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRUE ALS — KHATRI-RAO + GRAM + LINEAR SOLVE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Tensor unfolding (matricization) along mode `mode` (0=I, 1=J, 2=K).
+ * Returns a Float64Array of shape [dim_mode × prod_other_dims].
+ */
+function unfold(T, I, J, K, mode) {
+    if (mode === 0) {
+        // Row: i, Col: j*K + k
+        const M = new Float64Array(I * J * K);
+        for (let i=0; i<I; i++) for (let j=0; j<J; j++) for (let k=0; k<K; k++)
+            M[i * J*K + j*K + k] = T[i*J*K + j*K + k];
+        return { data: M, rows: I, cols: J*K };
+    } else if (mode === 1) {
+        // Row: j, Col: i*K + k
+        const M = new Float64Array(J * I*K);
+        for (let j=0; j<J; j++) for (let i=0; i<I; i++) for (let k=0; k<K; k++)
+            M[j * I*K + i*K + k] = T[i*J*K + j*K + k];
+        return { data: M, rows: J, cols: I*K };
+    } else {
+        // Row: k, Col: i*J + j
+        const M = new Float64Array(K * I*J);
+        for (let k=0; k<K; k++) for (let i=0; i<I; i++) for (let j=0; j<J; j++)
+            M[k * I*J + i*J + j] = T[i*J*K + j*K + k];
+        return { data: M, rows: K, cols: I*J };
+    }
+}
+
+/**
+ * Khatri-Rao product of two matrices A [m×R] and B [n×R].
+ * Result: [(m*n) × R] where col r = kron(A[:,r], B[:,r]).
+ */
+function khatriRao(A, m, B, n, R) {
+    const KR = new Float64Array(m * n * R);
+    for (let r=0; r<R; r++) {
+        for (let i=0; i<m; i++) {
+            for (let j=0; j<n; j++) {
+                KR[(i*n + j) * R + r] = A[i*R + r] * B[j*R + r];
+            }
+        }
+    }
+    // Reshape to (m*n) rows × R cols (row-major)
+    return KR; // indexed as KR[row*R + col]
+}
+
+/**
+ * Gram matrix: G = A^T A, shape [R×R].
+ */
+function gram(A, rows, R) {
+    const G = new Float64Array(R * R);
+    for (let r1=0; r1<R; r1++) for (let r2=0; r2<R; r2++) {
+        let s = 0;
+        for (let i=0; i<rows; i++) s += A[i*R + r1] * A[i*R + r2];
+        G[r1*R + r2] = s;
+    }
+    return G;
+}
+
+/**
+ * Hadamard (element-wise) product of two R×R matrices.
+ */
+function hadamard(G1, G2, R) {
+    const H = new Float64Array(R * R);
+    for (let i=0; i<R*R; i++) H[i] = G1[i] * G2[i];
+    return H;
+}
+
+/**
+ * Invert a small R×R matrix using Gauss-Jordan with partial pivoting.
+ * Returns the inverse, or a pseudo-inverse (zeros) on singular input.
+ */
+function invertR(V, R) {
+    // Build augmented matrix [V | I]
+    const aug = new Float64Array(R * 2 * R);
+    for (let i=0; i<R; i++) {
+        for (let j=0; j<R; j++) aug[i*(2*R) + j]   = V[i*R + j];
+        aug[i*(2*R) + R + i] = 1.0; // identity right side
+    }
+    for (let col=0; col<R; col++) {
+        // Partial pivot
+        let maxVal = Math.abs(aug[col*(2*R) + col]), maxRow = col;
+        for (let row=col+1; row<R; row++) {
+            if (Math.abs(aug[row*(2*R) + col]) > maxVal) {
+                maxVal = Math.abs(aug[row*(2*R) + col]); maxRow = row;
+            }
+        }
+        if (maxRow !== col) {
+            for (let c=0; c<2*R; c++) {
+                const t = aug[col*(2*R)+c]; aug[col*(2*R)+c] = aug[maxRow*(2*R)+c]; aug[maxRow*(2*R)+c] = t;
+            }
+        }
+        const pivot = aug[col*(2*R) + col];
+        if (Math.abs(pivot) < 1e-14) continue; // degenerate column
+        for (let c=0; c<2*R; c++) aug[col*(2*R)+c] /= pivot;
+        for (let row=0; row<R; row++) {
+            if (row === col) continue;
+            const f = aug[row*(2*R) + col];
+            for (let c=0; c<2*R; c++) aug[row*(2*R)+c] -= f * aug[col*(2*R)+c];
+        }
+    }
+    // Extract right half = V^{-1}
+    const inv = new Float64Array(R * R);
+    for (let i=0; i<R; i++) for (let j=0; j<R; j++) inv[i*R+j] = aug[i*(2*R) + R + j];
+    return inv;
+}
+
+/**
+ * Solve the ALS subproblem: X = M * V^{-1}
+ * M is [numRows × R], V is [R × R] (symmetric positive semi-definite).
+ * Returns X [numRows × R].
+ */
+function solveRHS(M, V, numRows, R) {
+    const Vinv = invertR(V, R);
+    const X = new Float64Array(numRows * R);
+    // X = M * Vinv
+    for (let i=0; i<numRows; i++) {
+        for (let r=0; r<R; r++) {
+            let s = 0;
+            for (let c=0; c<R; c++) s += M[i*R + c] * Vinv[c*R + r];
+            X[i*R + r] = s;
+        }
+    }
+    return X;
+}
+
+/**
+ * M_update = T_(mode) * KR_other, shape [dim_mode × R]
+ */
+function mttkrp(Tunfold, KR, dimN, colsKR, R) {
+    // T: dimN x colsKR, KR: colsKR x R  →  result: dimN x R
+    const M = new Float64Array(dimN * R);
+    for (let i=0; i<dimN; i++) {
+        for (let r=0; r<R; r++) {
+            let s = 0;
+            for (let c=0; c<colsKR; c++) s += Tunfold[i*colsKR + c] * KR[c*R + r];
+            M[i*R + r] = s;
+        }
+    }
+    return M;
+}
+
+/**
+ * Normalize columns of A (in-place), return lambda (norms).
+ */
+function normalizeColumns(A, rows, R) {
+    const lambda = new Float64Array(R);
+    for (let r=0; r<R; r++) {
+        let norm = 0;
+        for (let i=0; i<rows; i++) norm += A[i*R + r] ** 2;
+        lambda[r] = Math.sqrt(norm) || 1;
+        for (let i=0; i<rows; i++) A[i*R + r] /= lambda[r];
+    }
+    return lambda;
+}
+
+/**
+ * Reconstruct full tensor from factors A[I×R], B[J×R], C[K×R], lambda[R].
+ */
+function reconstruct(A, B, C, lambda, I, J, K, R) {
+    const T = new Float32Array(I*J*K);
+    for (let i=0; i<I; i++) for (let j=0; j<J; j++) for (let k=0; k<K; k++) {
+        let s = 0;
+        for (let r=0; r<R; r++) s += lambda[r] * A[i*R+r] * B[j*R+r] * C[k*R+r];
+        T[i*J*K + j*K + k] = s;
+    }
+    return T;
+}
+
+/**
+ * Frobenius norm squared of a tensor.
+ */
+function frobSq(T, n) { let s=0; for (let i=0; i<n; i++) s += T[i]*T[i]; return s; }
+
+/**
+ * True ALS for CP decomposition with optional Tikhonov regularization.
+ *
+ * Each ALS sweep:
+ *  1. Compute KR = C ⊙ B  (Khatri-Rao)
+ *  2. Compute V  = (C^T C) * (B^T B)  (Hadamard of Grams) + λI
+ *  3. Solve A  = T_(1) * KR * V^{-1}
+ *  4. Normalize columns of A → λ_A
+ *  5. Repeat for B (KR = C ⊙ A) and C (KR = B ⊙ A)
+ */
+async function* runALS(T_obs, I, J, K, R, lambda_reg, maxIter) {
+    // Initialize factors with small random values (uniform [-1,1])
+    const A = new Float64Array(I*R).map(() => Math.random() * 2 - 1);
+    const B = new Float64Array(J*R).map(() => Math.random() * 2 - 1);
+    const C = new Float64Array(K*R).map(() => Math.random() * 2 - 1);
+    let lambda = new Float64Array(R).fill(1);
+
+    // Precompute tensor unfoldings (expensive, done once)
+    const T1 = unfold(T_obs, I, J, K, 0); // Mode-1: I × J*K
+    const T2 = unfold(T_obs, I, J, K, 1); // Mode-2: J × I*K
+    const T3 = unfold(T_obs, I, J, K, 2); // Mode-3: K × I*J
+
+    const normT = Math.sqrt(frobSq(T_obs, I*J*K));
+
+    const reg = lambda_reg;
+
+    for (let iter = 0; iter < maxIter; iter++) {
+        // ── Update A ── T_(1) * (C ⊙ B) * ((C^TC * B^TB) + λI)^{-1}
+        {
+            const KR = khatriRao(C, K, B, J, R); // (K*J) × R  → wait, need C ⊙ B in mode-1 context
+            // For mode-1 unfold (I × J*K), we need KR of the other two modes ordered by (j, k) matching cols of T_(1)
+            // T_(1) cols are indexed (j,k), so KR should be B ⊙ C: rows indexed (j*K + k)
+            const KR1 = khatriRao(B, J, C, K, R); // (J*K) × R
+            const GM_B = gram(B, J, R);
+            const GM_C = gram(C, K, R);
+            const V = hadamard(GM_B, GM_C, R);
+            for (let r=0; r<R; r++) V[r*R + r] += reg; // Tikhonov
+            const M = mttkrp(T1.data, KR1, I, J*K, R);
+            const newA = solveRHS(M, V, I, R);
+            for (let x=0; x<I*R; x++) A[x] = newA[x];
+            lambda = normalizeColumns(A, I, R);
+        }
+        // ── Update B ── T_(2) * (C ⊙ A) * ((C^TC * A^TA) + λI)^{-1}
+        // T_(2) cols indexed (i*K + k), so KR = A ⊙ C
+        {
+            const KR2 = khatriRao(A, I, C, K, R); // (I*K) × R
+            const GM_A = gram(A, I, R);
+            const GM_C = gram(C, K, R);
+            const V = hadamard(GM_A, GM_C, R);
+            for (let r=0; r<R; r++) V[r*R + r] += reg;
+            const M = mttkrp(T2.data, KR2, J, I*K, R);
+            const newB = solveRHS(M, V, J, R);
+            for (let x=0; x<J*R; x++) B[x] = newB[x];
+            lambda = normalizeColumns(B, J, R);
+        }
+        // ── Update C ── T_(3) * (B ⊙ A) * ((B^TB * A^TA) + λI)^{-1}
+        // T_(3) cols indexed (i*J + j), so KR = A ⊙ B
+        {
+            const KR3 = khatriRao(A, I, B, J, R); // (I*J) × R
+            const GM_A = gram(A, I, R);
+            const GM_B = gram(B, J, R);
+            const V = hadamard(GM_A, GM_B, R);
+            for (let r=0; r<R; r++) V[r*R + r] += reg;
+            const M = mttkrp(T3.data, KR3, K, I*J, R);
+            const newC = solveRHS(M, V, K, R);
+            for (let x=0; x<K*R; x++) C[x] = newC[x];
+            lambda = normalizeColumns(C, K, R);
+        }
+
+        // ── Compute loss ──
+        const T_hat = reconstruct(A, B, C, lambda, I, J, K, R);
+        let errSq = 0;
+        for (let x=0; x<I*J*K; x++) { const d = T_hat[x] - T_obs[x]; errSq += d*d; }
+        const relErr = Math.sqrt(errSq) / normT;
+        const mse    = errSq / (I*J*K);
+
+        yield { iter, mse, relErr, A: A.slice(), B: B.slice(), C: C.slice(), lambda: lambda.slice(), T_hat };
+
+        // Yield event loop
+        await new Promise(r => setTimeout(r, 0));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA GENERATION
+// ─────────────────────────────────────────────────────────────────────────────
+function syntheticTensor(I, J, K) {
+    // Rank-3 tensor with orthogonal-ish factors for easy validation
+    const T = new Float32Array(I * J * K);
+    for (let i=0; i<I; i++) for (let j=0; j<J; j++) for (let k=0; k<K; k++) {
+        const v =
+            Math.sin(Math.PI * i / I) * Math.cos(Math.PI * j / J) * Math.exp(-k / (K * 0.5)) +
+            0.7 * Math.cos(2 * Math.PI * i / I) * Math.sin(2 * Math.PI * j / J) * Math.cos(Math.PI * k / K) +
+            0.5 * (i / I - 0.5) * (j / J - 0.5) * Math.sin(3 * Math.PI * k / K);
+        T[i*J*K + j*K + k] = v + (Math.random() - 0.5) * 0.02; // very small noise
+    }
+    return T;
+}
+
+function parseTensorDataset(text, filename) {
+    const isTns = filename.toLowerCase().endsWith('.tns');
+    const lines = text.trim().split('\n');
+    let maxI=0, maxJ=0, maxK=0;
+    const entries = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || line.startsWith('%') || line.startsWith('#')) continue;
+        
+        let cols;
+        if (line.includes(',')) cols = line.split(',');
+        else cols = line.split(/\s+/); // FROSTT .tns uses spaces/tabs
+        
+        if (cols.length < 4) continue;
+        if (i === 0 && isNaN(parseFloat(cols[0]))) continue; // skip header if exists
+        
+        let idxI = parseInt(cols[0]);
+        let idxJ = parseInt(cols[1]);
+        let idxK = parseInt(cols[2]);
+        const v = parseFloat(cols[3]);
+        
+        // FROSTT .tns standard is 1-indexed. CSV is usually 0-indexed.
+        if (isTns) { idxI--; idxJ--; idxK--; }
+        
+        // Ignore rows with negative indices (bad formatting)
+        if (idxI < 0 || idxJ < 0 || idxK < 0) continue;
+        
+        maxI=Math.max(maxI, idxI+1); maxJ=Math.max(maxJ, idxJ+1); maxK=Math.max(maxK, idxK+1);
+        entries.push({ i:idxI, j:idxJ, k:idxK, v });
+    }
+    
+    const T = new Float32Array(maxI*maxJ*maxK);
+    entries.forEach(({i,j,k,v}) => T[i*maxJ*maxK + j*maxK + k] = v);
+    $('pI').value = maxI; $('vI').textContent = maxI;
+    $('pJ').value = maxJ; $('vJ').textContent = maxJ;
+    $('pK').value = maxK; $('vK').textContent = maxK;
+    $('pSliceK').max = maxK - 1;
+    log(`✓ Format ${isTns?'.tns':'.csv'} loaded: ${maxI}×${maxJ}×${maxK}, ${entries.length} non-zeros`, 'ok');
+    return T;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISUALIZATION
+// ─────────────────────────────────────────────────────────────────────────────
+function viridis(t) {
+    // Approximate Viridis palette
+    const r = Math.round(Math.max(0, Math.min(255, 68 + t*(-68+253))));
+    const g = Math.round(Math.max(0, Math.min(255, 1  + t*231)));
+    const b = Math.round(Math.max(0, Math.min(255, 135 + t*(-135+37))));
+    return [r * (1-t) + 253 * t, g, b * (1-t) + 37 * t];
+}
+
+function drawHeatmap(canvas, tensor, I, J, K, k, globalMin, globalMax) {
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(J, I);
+    for (let i=0; i<I; i++) for (let j=0; j<J; j++) {
+        const v = tensor[i*J*K + j*K + k];
+        const t = (v - globalMin) / (globalMax - globalMin + 1e-12);
+        const [r, g, b] = viridis(Math.max(0, Math.min(1, t)));
+        const p = (i*J + j)*4;
+        img.data[p]=r; img.data[p+1]=g; img.data[p+2]=b; img.data[p+3]=255;
+    }
+    const tmp = document.createElement('canvas');
+    tmp.width = J; tmp.height = I;
+    tmp.getContext('2d').putImageData(img, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+}
+
+function drawResidual(canvas, obs, rec, I, J, K, k) {
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(J, I);
+    let maxErr = 0;
+    for (let i=0; i<I; i++) for (let j=0; j<J; j++) {
+        const err = Math.abs(obs[i*J*K + j*K + k] - rec[i*J*K + j*K + k]);
+        if (err > maxErr) maxErr = err;
+    }
+    for (let i=0; i<I; i++) for (let j=0; j<J; j++) {
+        const err = Math.abs(obs[i*J*K + j*K + k] - rec[i*J*K + j*K + k]);
+        const t = err / (maxErr + 1e-12);
+        const p = (i*J + j)*4;
+        img.data[p]   = Math.round(t * 255); // red channel = error
+        img.data[p+1] = Math.round((1-t) * 50);
+        img.data[p+2] = Math.round((1-t) * 80);
+        img.data[p+3] = 255;
+    }
+    const tmp = document.createElement('canvas');
+    tmp.width = J; tmp.height = I;
+    tmp.getContext('2d').putImageData(img, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+}
+
+function renderAll(obsT, recT, I, J, K, k) {
+    // Compute global min/max for consistent scale
+    let mn = Infinity, mx = -Infinity;
+    for (let i=0; i<I*J*K; i++) { mn = Math.min(mn, obsT[i]); mx = Math.max(mx, obsT[i]); }
+    drawHeatmap($('canvasObs'), obsT, I, J, K, k, mn, mx);
+    if (recT) {
+        drawHeatmap($('canvasRec'), recT, I, J, K, k, mn, mx);
+        drawResidual($('canvasErr'), obsT, recT, I, J, K, k);
+    }
+}
+
+function updateFactorTable(headId, bodyId, F, rows, R, label) {
+    const head = $(headId);
+    const body = $(bodyId);
+    head.innerHTML = `<th>${label}</th>` + Array.from({length: Math.min(R,4)}, (_,r) => `<th>r=${r}</th>`).join('');
+    body.innerHTML = '';
+    const display = Math.min(rows, 8);
+    for (let i=0; i<display; i++) {
+        const tr = document.createElement('tr');
+        let html = `<td>${i}</td>`;
+        for (let r=0; r<Math.min(R,4); r++) {
+            const v = F[i*R + r];
+            html += `<td>${v.toFixed(3)}</td>`;
+        }
+        tr.innerHTML = html;
+        body.appendChild(tr);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHART
+// ─────────────────────────────────────────────────────────────────────────────
+const chart = new Chart($('chartLoss').getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [
+        { label: 'Rel. Error', data: [], borderColor: '#00e5cc', backgroundColor: '#00e5cc10', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true, yAxisID: 'y' },
+        { label: 'MSE', data: [], borderColor: '#7b5ea7', borderDash: [4,2], borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, yAxisID: 'y2' }
+    ]},
+    options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: true, labels: { color: '#4a5070', font: { size: 10 } } } },
+        scales: {
+            x: { display: false },
+            y:  { type: 'logarithmic', position: 'left',  grid: { color: '#1a1a30' }, ticks: { color: '#4a5070', font: { size: 9 }, maxTicksLimit: 6 }, title: { display: true, text: 'Rel. Err', color: '#00e5cc', font: { size: 9 } } },
+            y2: { type: 'logarithmic', position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#7b5ea7', font: { size: 9 }, maxTicksLimit: 4 }, title: { display: true, text: 'MSE', color: '#7b5ea7', font: { size: 9 } } }
+        }
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let observedTensor = null;
+let lastFactors = null;
+let stopRequested = false;
+
+$('fileInput').addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return;
+    $('fileBtnLabel').textContent = '✓ ' + file.name;
+    new FileReader().onload = evt => { 
+        observedTensor = parseTensorDataset(evt.target.result, file.name); 
+        $('btnRun').disabled = false; 
+    };
+    new FileReader().readAsText(file);
+});
+
+$('btnDemo').addEventListener('click', () => {
+    const I=+$('pI').value, J=+$('pJ').value, K=+$('pK').value;
+    observedTensor = syntheticTensor(I, J, K);
+    $('pSliceK').max = K-1; $('pSliceK').value = 0; $('vSliceK').textContent = 'k=0';
+    renderAll(observedTensor, null, I, J, K, 0);
+    $('btnRun').disabled = false;
+    $('statusBadge').textContent = 'READY';
+    log(`✓ Synthetic tensor ${I}×${J}×${K} (rank-3 + noise)`, 'ok');
+});
+
+$('btnMovieLens').addEventListener('click', async () => {
+    try {
+        $('btnMovieLens').disabled = true;
+        log('Fetching MovieLens Tags Benchmark...', 'info');
+        // Assuming the file is mounted correctly in the web server relative path
+        const res = await fetch('/tests/manifests/tensor_movielens_tags.csv');
+        if (!res.ok) throw new Error("File not found. Ensure tensor_movielens_tags.csv exists in tests/manifests.");
+        const text = await res.text();
+        observedTensor = parseTensorDataset(text, 'tensor_movielens_tags.csv');
+        $('btnRun').disabled = false;
+        $('statusBadge').textContent = 'READY';
+        log(`✓ Benchmark MovieLens Loaded successfully!`, 'ok');
+        const I=+$('pI').value, J=+$('pJ').value, K=+$('pK').value;
+        renderAll(observedTensor, null, I, J, K, 0);
+    } catch(e) {
+        log('Error: ' + e.message, 'err');
+    } finally {
+        $('btnMovieLens').disabled = false;
+    }
+});
+
+$('pSliceK').addEventListener('input', () => {
+    const k = +$('pSliceK').value;
+    $('vSliceK').textContent = 'k=' + k;
+    if (observedTensor) {
+        const I=+$('pI').value, J=+$('pJ').value, K=+$('pK').value;
+        const T_hat = lastFactors ? lastFactors.T_hat : null;
+        renderAll(observedTensor, T_hat, I, J, K, k);
+    }
+});
+
+$('btnExport').addEventListener('click', () => {
+    if (!lastFactors) return;
+    const { I, J, K, R, A, B, C, lambda, iter, mse, relErr } = lastFactors;
+    const data = {
+        metadata: { I, J, K, R, iter, mse, relErr, algorithm: "ALS + Tikhonov", framework: "Hypercube GPU" },
+        lambda: Array.from(lambda),
+        A: Array.from(A),
+        B: Array.from(B),
+        C: Array.from(C)
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tensor_cp_factors_I${I}_J${J}_K${K}_R${R}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    log('✓ Factors exported to JSON', 'ok');
+});
+
+$('btnRun').addEventListener('click', doRun);
+$('btnStop').addEventListener('click', () => { stopRequested = true; });
+
+async function doRun() {
+    if (!observedTensor) return;
+    stopRequested = false;
+    $('btnRun').disabled = true; $('btnStop').style.display = '';
+    $('statusBadge').textContent = 'RUNNING';
+    chart.data.labels = []; chart.data.datasets.forEach(d => d.data = []); chart.update('none');
+
+    const I=+$('pI').value, J=+$('pJ').value, K=+$('pK').value;
+    const R=+$('pR').value, maxIter=+$('pIter').value;
+    const reg = Math.pow(10, parseFloat($('pLambda').value));
+
+    log(`ALS: ${I}×${J}×${K}, R=${R}, λ=${reg.toExponential(1)}, iters=${maxIter}`);
+
+    const als = runALS(observedTensor, I, J, K, R, reg, maxIter);
+
+    for await (const { iter, mse, relErr, A, B, C, lambda, T_hat } of als) {
+        if (stopRequested) break;
+
+        lastFactors = { I, J, K, R, A, B, C, lambda, iter, mse, relErr, T_hat };
+        const k = +$('pSliceK').value;
+        renderAll(observedTensor, T_hat, I, J, K, k);
+
+        chart.data.labels.push(iter);
+        chart.data.datasets[0].data.push(relErr);
+        chart.data.datasets[1].data.push(mse);
+        if (chart.data.labels.length > 300) {
+            chart.data.labels.shift();
+            chart.data.datasets.forEach(d => d.data.shift());
+        }
+        chart.update('none');
+
+        $('mIter').textContent = iter;
+        $('mLoss').textContent = mse.toExponential(3);
+
+        const pct = (relErr * 100).toFixed(2) + '%';
+        $('mRel').textContent = pct;
+        $('mRel').className = 'metric-val ' + (relErr < 0.05 ? 'good' : relErr < 0.15 ? 'mid' : 'bad');
+
+        updateFactorTable('headA', 'bodyA', A, I, R, 'i');
+        updateFactorTable('headB', 'bodyB', B, J, R, 'j');
+        updateFactorTable('headC', 'bodyC', C, K, R, 'k');
+    }
+
+    const done = stopRequested ? 'STOPPED' : 'DONE';
+    $('statusBadge').textContent = done;
+    $('btnRun').disabled = false; $('btnStop').style.display = 'none';
+    $('btnExport').style.display = 'block';
+    log(`✓ Finished: iter=${$('mIter').textContent}, relErr=${$('mRel').textContent}`, 'ok');
+}
+</script>
+</body>
+</html>

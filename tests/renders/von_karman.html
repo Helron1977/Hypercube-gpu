@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hypercube - Von Karman Audit</title>
+    <style>
+        body { background: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; padding: 20px; }
+        #log { background: #1e293b; padding: 15px; border-radius: 8px; font-family: monospace; height: 50vh; overflow-y: auto; white-space: pre-wrap; }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        #canvas-container { margin-top: 20px; text-align: center; }
+        canvas { border: 1px solid #334155; border-radius: 4px; background: #000; max-width: 100%; }
+    </style>
+</head>
+<body>
+    <h1>Phase 2.1: Von Karman Vortex Street Audit</h1>
+    <div id="status">Initializing WebGPU Enironment...</div>
+    <div id="log"></div>
+
+    <div id="canvas-container">
+        <h3>Wake Visualization (Vorticity)</h3>
+        <canvas id="viz"></canvas>
+    </div>
+
+    <script type="module">
+        const log = document.getElementById('log');
+        const oldLog = console.log;
+        console.log = (...args) => {
+            log.innerText += args.join(' ') + '\n';
+            log.scrollTop = log.scrollHeight;
+            oldLog(...args);
+        };
+
+        const canvas = document.getElementById('viz');
+        const ctx = canvas.getContext('2d');
+
+        function drawFrame(data, nx, ny) {
+            if (canvas.width !== nx) {
+                canvas.width = nx;
+                canvas.height = ny;
+            }
+            const imgData = ctx.createImageData(nx, ny);
+            const lx = nx + 2;
+            
+            for (let y = 0; y < ny; y++) {
+                for (let x = 0; x < nx; x++) {
+                    const val = data[(y + 1) * lx + (x + 1)] * 50.0; // Scale for viz
+                    const idx = (y * nx + x) * 4;
+                    
+                    // Simple Blue-White-Red Map
+                    if (val > 0) {
+                        imgData.data[idx + 0] = Math.min(255, 255);
+                        imgData.data[idx + 1] = Math.max(0, 255 - val * 255);
+                        imgData.data[idx + 2] = Math.max(0, 255 - val * 255);
+                    } else {
+                        const v = -val;
+                        imgData.data[idx + 0] = Math.max(0, 255 - v * 255);
+                        imgData.data[idx + 1] = Math.max(0, 255 - v * 255);
+                        imgData.data[idx + 2] = Math.min(255, 255);
+                    }
+                    imgData.data[idx + 3] = 255;
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        import { runVonKarmanAudit } from '../validation/von_karman.ts';
+        
+        async function start() {
+            try {
+                const results = await runVonKarmanAudit(drawFrame);
+                document.getElementById('status').innerText = `AUDIT COMPLETE: ${results.status.toUpperCase()}`;
+                if (results.status === 'stable') {
+                    document.getElementById('status').classList.add('success');
+                } else {
+                    document.getElementById('status').classList.add('error');
+                }
+            } catch (e) {
+                console.error("Audit Runtime Error:", e);
+                document.getElementById('status').innerText = 'AUDIT FAILED';
+            }
+        }
+        
+        start();
+    </script>
+</body>
+</html>

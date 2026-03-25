@@ -1,0 +1,22 @@
+{
+  "config": {
+    "dimensions": { "nx": 256, "ny": 256, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "wall" } },
+    "engine": "wave-verify",
+    "params": { "c2": 0.1, "dt": 0.5, "dx": 1.0 }
+  },
+  "engine": {
+    "name": "wave-verify",
+    "version": "1.0",
+    "requirements": { "ghostCells": 1, "pingPong": false },
+    "faces": [
+      { "name": "uNow", "type": "field", "isSynchronized": true },
+      { "name": "uOld", "type": "field", "isSynchronized": true },
+      { "name": "uNext", "type": "field", "isSynchronized": true }
+    ],
+    "rules": [
+      { "type": "WaveCore", "source": "/src/kernels/wgsl/WaveCore.wgsl", "faces": ["uNow", "uOld", "uNext"] }
+    ]
+  }
+}

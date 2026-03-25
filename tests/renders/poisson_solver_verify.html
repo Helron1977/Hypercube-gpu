@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU — Poisson Solver Audit</title>
+    <style>
+        * { margin: 0; box-sizing: border-box; }
+        body { background: #050508; color: #eee; font-family: 'Inter', system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 320px; background: #08080c; border-right: 1px solid #1a1a2e; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+        .main { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        canvas { background: #000; border-radius: 8px; width: 512px; height: 512px; image-rendering: pixelated; box-shadow: 0 0 80px rgba(200,0,255,0.06); }
+        .hud { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.92); border: 1px solid #aa44ff; padding: 16px 20px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; min-width: 220px; pointer-events: none; }
+        .hud-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .hud-val { color: #aa44ff; font-weight: 800; }
+        h1 { font-size: 1rem; color: #aa44ff; letter-spacing: 0.15em; text-transform: uppercase; border-bottom: 1px solid #1a1a2e; padding-bottom: 10px; }
+        .badge { display: inline-block; background: #aa44ff20; color: #aa44ff; font-size: 0.6rem; padding: 3px 8px; border-radius: 3px; font-weight: 800; letter-spacing: 0.1em; }
+        button { background: #aa44ff; color: #fff; border: none; padding: 14px; border-radius: 6px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; transition: all 0.15s; }
+        button:hover { background: #cc66ff; transform: translateY(-1px); }
+        .desc { font-size: 0.7rem; color: #555; line-height: 1.5; }
+        #log { font-size: 0.6rem; color: #444; font-family: monospace; max-height: 140px; overflow-y: auto; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div>
+            <h1>POISSON SOLVER</h1>
+            <span class="badge">FRAMEWORK DRIVEN</span>
+        </div>
+        <p class="desc">Iterative Jacobi solver for ∇²φ = f. Two point charges → potential field. Proves convergence of iterative GPU solvers.</p>
+        <button id="btnStart">SOLVE FIELD</button>
+        <div id="log"></div>
+    </div>
+    <div class="main">
+        <canvas id="c" width="128" height="128"></canvas>
+        <div class="hud">
+            <div class="hud-row"><span>ITER</span><span class="hud-val" id="hStep">0</span></div>
+            <div class="hud-row"><span>FPS</span><span class="hud-val" id="hFps">—</span></div>
+            <div class="hud-row"><span>φ_max</span><span class="hud-val" id="hMax">—</span></div>
+        </div>
+    </div>
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
+        const canvas = document.getElementById('c');
+        const log = document.getElementById('log');
+        let engine, wgsl, running = false, fc = 0, lt = 0;
+        const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
+
+        document.getElementById('btnStart').onclick = async () => {
+            if (running) return;
+            L('[1/4] Loading manifest...');
+            const f = new GpuCoreFactory();
+            const m = await f.loadManifest('../manifests/poisson_audit.json');
+            L('[2/4] Building engine...');
+            engine = await f.build(m.config, m.engine);
+            const lx = m.config.dimensions.nx + 2;
+            const cells = engine.buffer.layout.cellsPerFaceRaw;
+
+            L('[3/4] Setting charge sources (RHS)...');
+            const rhs = new Float32Array(cells);
+            // Two point charges, + and -
+            const cx1 = 40, cy1 = 64, cx2 = 88, cy2 = 64;
+            for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+                if (dx*dx+dy*dy < 9) {
+                    rhs[(cy1+1+dy)*lx+(cx1+1+dx)] = 10.0;
+                    rhs[(cy2+1+dy)*lx+(cx2+1+dx)] = -10.0;
+                }
+            }
+            engine.setFaceData('chunk_0_0_0', 'rhs', rhs);
+            engine.setFaceData('chunk_0_0_0', 'phi', new Float32Array(cells), true);
+            engine.syncToDevice();
+
+            L('[4/4] Loading kernel...');
+            wgsl = await (await fetch('/src/kernels/wgsl/PoissonCore.wgsl')).text();
+            running = true; lt = performance.now();
+            L('✓ Solving...');
+            requestAnimationFrame(tick);
+        };
+
+        async function tick(now) {
+            if (!running) return;
+            // 50 Jacobi iterations per frame for fast convergence
+            await engine.step({'PoissonCore': wgsl}, 50);
+
+            const ri = engine.parityManager.getFaceIndices('phi').read;
+            const res = await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
+                mode: 'bipolar', nx: 128, ny: 128,
+                faceIdx: ri,
+                strideFace: engine.buffer.strideFace, scale: 20.0
+            });
+            fc++;
+            if (now - lt > 500) {
+                document.getElementById('hFps').innerText = Math.round(fc/((now-lt)/1000));
+                fc=0; lt=now;
+            }
+            document.getElementById('hStep').innerText = engine.parityManager.currentTick;
+            requestAnimationFrame(tick);
+        }
+    </script>
+</body>
+</html>

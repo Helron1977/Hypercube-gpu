@@ -1,0 +1,20 @@
+{
+  "config": {
+    "dimensions": { "nx": 256, "ny": 256, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "wall" } },
+    "engine": "diffusion-verify",
+    "params": { "kappa": 0.25, "dt": 1.0 }
+  },
+  "engine": {
+    "name": "diffusion-verify",
+    "version": "1.0",
+    "requirements": { "ghostCells": 1, "pingPong": true },
+    "faces": [
+      { "name": "t", "type": "field", "isSynchronized": true }
+    ],
+    "rules": [
+      { "type": "DiffusionCore", "source": "/src/kernels/wgsl/DiffusionCore.wgsl", "faces": ["t.read", "t.write"] }
+    ]
+  }
+}

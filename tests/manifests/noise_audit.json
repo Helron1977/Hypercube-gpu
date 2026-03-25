@@ -1,0 +1,20 @@
+{
+  "config": {
+    "dimensions": { "nx": 256, "ny": 256, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "wall" } },
+    "engine": "noise-verify",
+    "params": { "scale": 1.0, "octaves": 4.0 }
+  },
+  "engine": {
+    "name": "noise-verify",
+    "version": "1.0",
+    "requirements": { "ghostCells": 1, "pingPong": false },
+    "faces": [
+      { "name": "noise", "type": "field", "isSynchronized": true }
+    ],
+    "rules": [
+      { "type": "NoiseCore", "source": "/src/kernels/wgsl/NoiseCore.wgsl" }
+    ]
+  }
+}

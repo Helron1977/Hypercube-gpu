@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube | Tensor CP Service (v3.0-PRO)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/tensor-cp.css">
+</head>
+<body class="hpc-interface">
+
+    <nav class="sidebar">
+        <section class="brand-unit">
+            <span class="brand-title">HYPERCUBE</span>
+            <span class="brand-version">V3.0-PRO / TENSOR-CP</span>
+        </section>
+
+        <section class="control-group">
+            <h3 class="group-label">ENTRÉE DES DONNÉES</h3>
+            <button class="action-btn" id="uploadAction">IMPORTER TENSEUR (CSV/TNS)</button>
+            <input type="file" id="fileInput" style="display:none" accept=".csv,.tns,.txt">
+            <button class="action-btn secondary" id="benchAction">CHARGER BENCHMARK (MOVIELENS)</button>
+            <button class="action-btn secondary" id="btnDemo" style="margin-top:4px; border-style: dotted;">▷ GÉNÉRER TENSEUR SYNTHÉTIQUE</button>
+        </section>
+
+        <section class="control-group">
+            <h3 class="group-label">CONFIGURATION ALS</h3>
+            <div class="field">
+                <label>RANG (R) <span id="valR">4</span></label>
+                <input type="range" id="paramR" min="1" max="50" value="4">
+            </div>
+            <div class="field">
+                <label>ITÉRATIONS MAX <span id="valIter">100</span></label>
+                <input type="range" id="paramIter" min="10" max="1000" value="100">
+            </div>
+            <div class="field">
+                <label>RÉGULARISATION <span id="valReg">1e-6</span></label>
+                <input type="range" id="paramReg" min="-10" max="-1" value="-6" step="0.5">
+            </div>
+        </section>
+
+        <section class="control-group">
+            <h3 class="group-label">OPTIMISATION DU RANG</h3>
+            <div class="field">
+                <label>SCAN RANGE (R_min - R_max)</label>
+                <div class="dual-input">
+                    <input type="number" id="scanMin" value="1">
+                    <input type="number" id="scanMax" value="10">
+                </div>
+            </div>
+            <button class="action-btn secondary" id="btnAutoScan">LANCER L'ANALYSE AUTO</button>
+        </section>
+
+        <footer class="sidebar-footer">
+            <button class="primary-btn" id="runProcess">LANCER LE CALCUL</button>
+            <button class="action-btn secondary" id="stopProcess" style="display:none; width:100%; margin-top:8px; border-color: #ff4444; color: #ff4444;">ARRÊTER LE CALCUL</button>
+        </footer>
+    </nav>
+
+    <main class="viewport">
+        <header class="status-bar">
+            <div class="task-info">PROJET: <span id="currentTask">SANS_TITRE</span></div>
+            
+            <div class="view-toggle">
+                <button class="toggle-btn active" id="viewSim">Simulation</button>
+                <button class="toggle-btn" id="viewDiag">Diagnostic</button>
+            </div>
+
+            <div class="system-status" id="sysStatus">PRÊT</div>
+        </header>
+
+        <div class="visualization-grid">
+            <div class="panel" id="panelObs">
+                <div class="panel-header">
+                    <span class="panel-title">OBSERVATION RÉELLE</span>
+                    <div class="slice-selector">SLICE K: <input type="number" id="sliceK" value="0"></div>
+                </div>
+                <div class="canvas-mount">
+                    <canvas id="canvasObs"></canvas>
+                </div>
+            </div>
+
+            <div class="panel" id="panelRec">
+                <div class="panel-header">
+                    <span class="panel-title">MODÈLE RECONSTRUIT</span>
+                    <span class="accuracy-indicator">ERROR: <span id="relErr">0.00</span>%</span>
+                </div>
+                <div class="canvas-mount">
+                    <canvas id="canvasRec"></canvas>
+                </div>
+            </div>
+
+            <div class="panel" id="diagnosticPanel" style="grid-column: span 2;">
+                <div class="panel-header">
+                    <span class="panel-title">DIAGNOSTIC DE RANG (CORCONDIA & LOSS)</span>
+                </div>
+                <div class="canvas-mount" style="padding: 10px;">
+                    <canvas id="canvasDiagnostic"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <section class="diagnostic-area">
+            <div class="log-stream" id="logStream">
+                [SYSTEM] Initialisation du module graphique effectuée.
+                [SYSTEM] Prêt pour le chargement des données.
+            </div>
+            <div class="metrics-summary">
+                <div class="metric">
+                    <span class="m-label">LOSS (F)</span>
+                    <span class="m-value" id="frobLoss">---</span>
+                </div>
+                <div class="metric">
+                    <span class="m-label">CORCONDIA</span>
+                    <span class="m-value" id="corcondiaVal">---</span>
+                </div>
+                <div class="metric">
+                    <span class="m-label">ITERATION</span>
+                    <span class="m-value" id="currentIter">---</span>
+                </div>
+                <button class="export-btn" id="exportData">EXPORTER FACTEURS (JSON)</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="module" src="assets/js/tensor-cp-ui.js"></script>
+</body>
+</html>

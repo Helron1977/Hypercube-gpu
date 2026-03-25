@@ -1,0 +1,55 @@
+{
+  "name": "LBM Scientific Audit",
+  "version": "1.0.0",
+  "config": {
+    "dimensions": { "nx": 512, "ny": 256, "nz": 1 },
+    "chunks": { "x": 1, "y": 1 },
+    "boundaries": {
+      "left": { "role": "inflow" },
+      "right": { "role": "outflow" },
+      "top": { "role": "wall" },
+      "bottom": { "role": "wall" }
+    },
+    "engine": "LbmScientific",
+    "params": {
+      "omega": 1.85,
+      "inflow": 0.12
+    },
+    "objects": [
+      {
+        "id": "circle_obs",
+        "type": "circle",
+        "position": { "x": 80, "y": 128 },
+        "dimensions": { "w": 40, "h": 40 },
+        "properties": { "isObstacle": 1, "isSmoke": 0 }
+      }
+    ]
+  },
+  "engine": {
+    "name": "LbmScientific",
+    "version": "1.0.0",
+    "faces": [
+      { "name": "obs", "type": "mask", "isSynchronized": false },
+      { "name": "ux", "type": "macro", "isSynchronized": false },
+      { "name": "uy", "type": "macro", "isSynchronized": false },
+      { "name": "rho", "type": "scalar", "isSynchronized": false },
+      { "name": "curl", "type": "scalar", "isSynchronized": false },
+      { "name": "f_d0", "type": "population", "isSynchronized": true },
+      { "name": "f_d1", "type": "population", "isSynchronized": true },
+      { "name": "f_d2", "type": "population", "isSynchronized": true },
+      { "name": "f_d3", "type": "population", "isSynchronized": true },
+      { "name": "f_d4", "type": "population", "isSynchronized": true },
+      { "name": "f_d5", "type": "population", "isSynchronized": true },
+      { "name": "f_d6", "type": "population", "isSynchronized": true },
+      { "name": "f_d7", "type": "population", "isSynchronized": true },
+      { "name": "f_d8", "type": "population", "isSynchronized": true }
+    ],
+    "rules": [
+      { "type": "LbmScientific", "source": "/src/kernels/wgsl/LbmCore.wgsl" }
+    ],
+    "requirements": {
+      "ghostCells": 1,
+      "pingPong": true
+    }
+  }
+}

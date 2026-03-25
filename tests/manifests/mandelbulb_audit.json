@@ -1,0 +1,19 @@
+{
+  "config": {
+    "dimensions": { "nx": 64, "ny": 64, "nz": 64 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "wall" } },
+    "engine": "mandelbulb-verify",
+    "params": { "nz": 64, "maxIter": 20, "power": 8.0 }
+  },
+  "engine": {
+    "name": "mandelbulb-verify",
+    "requirements": { "ghostCells": 1, "pingPong": false },
+    "faces": [
+      { "name": "fractal", "type": "scalar", "isSynchronized": false }
+    ],
+    "rules": [
+      { "type": "MandelbulbCore", "source": "/src/kernels/wgsl/MandelbulbCore.wgsl" }
+    ]
+  }
+}

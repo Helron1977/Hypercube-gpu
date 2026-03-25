@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU — Heat Diffusion Audit</title>
+    <style>
+        * { margin: 0; box-sizing: border-box; }
+        body { background: #050508; color: #eee; font-family: 'Inter', system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 320px; background: #08080c; border-right: 1px solid #1a1a2e; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+        .main { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        canvas { background: #000; border-radius: 8px; width: 512px; height: 512px; image-rendering: pixelated; box-shadow: 0 0 80px rgba(255,100,0,0.08); }
+        .hud { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.92); border: 1px solid #ff6600; padding: 16px 20px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; min-width: 220px; pointer-events: none; }
+        .hud-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .hud-val { color: #ff6600; font-weight: 800; }
+        h1 { font-size: 1rem; color: #ff6600; letter-spacing: 0.15em; text-transform: uppercase; border-bottom: 1px solid #1a1a2e; padding-bottom: 10px; }
+        .badge { display: inline-block; background: #ff660020; color: #ff6600; font-size: 0.6rem; padding: 3px 8px; border-radius: 3px; font-weight: 800; letter-spacing: 0.1em; }
+        .ctrl { display: flex; flex-direction: column; gap: 6px; }
+        label { font-size: 0.65rem; color: #666; text-transform: uppercase; font-weight: 800; letter-spacing: 0.08em; }
+        input[type="range"] { width: 100%; accent-color: #ff6600; }
+        .val { font-family: monospace; font-size: 0.8rem; color: #ff6600; }
+        button { background: #ff6600; color: #000; border: none; padding: 14px; border-radius: 6px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; transition: all 0.15s; }
+        button:hover { background: #ff8833; transform: translateY(-1px); }
+        #log { font-size: 0.6rem; color: #444; font-family: monospace; max-height: 140px; overflow-y: auto; line-height: 1.5; }
+        .desc { font-size: 0.7rem; color: #555; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div>
+            <h1>HEAT DIFFUSION</h1>
+            <span class="badge">FRAMEWORK DRIVEN</span>
+        </div>
+        <p class="desc">Isotropic 2D heat equation. Hot spot diffuses into cold domain. Proves ping-pong buffer correctness.</p>
+        <div class="ctrl">
+            <label>Thermal Conductivity (κ)</label>
+            <input type="range" id="paramKappa" min="0.01" max="0.25" step="0.01" value="0.20">
+            <span class="val" id="valKappa">0.20</span>
+        </div>
+        <button id="btnStart">IGNITE CORE</button>
+        <div id="log"></div>
+    </div>
+    <div class="main">
+        <canvas id="c" width="256" height="256"></canvas>
+        <div class="hud">
+            <div class="hud-row"><span>STEP</span><span class="hud-val" id="hStep">0</span></div>
+            <div class="hud-row"><span>FPS</span><span class="hud-val" id="hFps">—</span></div>
+            <div class="hud-row"><span>T_max</span><span class="hud-val" id="hTmax">—</span></div>
+        </div>
+    </div>
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
+        const canvas = document.getElementById('c');
+        const log = document.getElementById('log');
+        let engine, wgsl, running = false, fc = 0, lt = 0;
+        const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
+
+        document.getElementById('btnStart').onclick = async () => {
+            if (running) return;
+            L('[1/4] Loading manifest...');
+            const f = new GpuCoreFactory();
+            const m = await f.loadManifest('../manifests/diffusion_audit.json');
+            L('[2/4] Building engine...');
+            engine = await f.build(m.config, m.engine);
+            const lx = m.config.dimensions.nx + 2;
+            const cells = engine.buffer.layout.cellsPerFaceRaw;
+
+            L('[3/4] Setting hot spot...');
+            const t0 = new Float32Array(cells);
+            const cx = 128, cy = 128, r = 20;
+            for (let y = 0; y < 258; y++) for (let x = 0; x < 258; x++) {
+                const dx = x-1-cx, dy = y-1-cy;
+                if (dx*dx+dy*dy < r*r) t0[y*lx+x] = 1.0;
+            }
+            engine.setFaceData('chunk_0_0_0', 't', t0, true);
+            engine.syncToDevice();
+
+            L('[4/4] Loading kernel...');
+            wgsl = await (await fetch('/src/kernels/wgsl/DiffusionCore.wgsl')).text();
+            running = true; lt = performance.now();
+            L('✓ Simulation running');
+            requestAnimationFrame(tick);
+        };
+
+        async function tick(now) {
+            if (!running) return;
+            const k = parseFloat(document.getElementById('paramKappa').value);
+            document.getElementById('valKappa').innerText = k.toFixed(2);
+            engine.vGrid.config.params.p0 = k;
+            engine.vGrid.config.params.p1 = 1.0;
+
+            await engine.step({'DiffusionCore': wgsl}, 4);
+
+            const res = await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
+                mode: 'single', nx: 256, ny: 256,
+                faceIdx: engine.parityManager.getFaceIndices('t').read,
+                strideFace: engine.buffer.strideFace, scale: 1.0
+            });
+            fc++;
+            if (now - lt > 500) {
+                document.getElementById('hFps').innerText = Math.round(fc/((now-lt)/1000));
+                fc=0; lt=now;
+            }
+            document.getElementById('hStep').innerText = engine.parityManager.currentTick;
+            if (res?.results) {
+                let mx = 0;
+                const sf = engine.buffer.strideFace;
+                const ri = engine.parityManager.getFaceIndices('t').read;
+                for (let i = 0; i < sf; i++) mx = Math.max(mx, res.results[ri*sf+i]);
+                document.getElementById('hTmax').innerText = mx.toFixed(4);
+            }
+            requestAnimationFrame(tick);
+        }
+    </script>
+</body>
+</html>

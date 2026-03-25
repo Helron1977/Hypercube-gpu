@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU — Mandelbulb 3D Audit</title>
+    <style>
+        * { margin: 0; box-sizing: border-box; }
+        body { background: #050508; color: #eee; font-family: 'Inter', system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 320px; background: #08080c; border-right: 1px solid #1a1a2e; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+        .main { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        canvas { background: #000; border-radius: 8px; width: 512px; height: 512px; image-rendering: pixelated; box-shadow: 0 0 80px rgba(255,100,255,0.06); }
+        .hud { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.92); border: 1px solid #ff66ff; padding: 16px 20px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; min-width: 220px; pointer-events: none; }
+        .hud-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .hud-val { color: #ff66ff; font-weight: 800; }
+        h1 { font-size: 1rem; color: #ff66ff; letter-spacing: 0.15em; text-transform: uppercase; border-bottom: 1px solid #1a1a2e; padding-bottom: 10px; }
+        .badge { display: inline-block; background: #ff66ff20; color: #ff66ff; font-size: 0.6rem; padding: 3px 8px; border-radius: 3px; font-weight: 800; letter-spacing: 0.1em; }
+        .ctrl { display: flex; flex-direction: column; gap: 6px; }
+        label { font-size: 0.65rem; color: #666; text-transform: uppercase; font-weight: 800; letter-spacing: 0.08em; }
+        input[type="range"] { width: 100%; accent-color: #ff66ff; }
+        .val { font-family: monospace; font-size: 0.8rem; color: #ff66ff; }
+        button { background: #ff66ff; color: #000; border: none; padding: 14px; border-radius: 6px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; transition: all 0.15s; }
+        button:hover { background: #ff88ff; transform: translateY(-1px); }
+        .desc { font-size: 0.7rem; color: #555; line-height: 1.5; }
+        #log { font-size: 0.6rem; color: #444; font-family: monospace; max-height: 140px; overflow-y: auto; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div>
+            <h1>MANDELBULB 3D</h1>
+            <span class="badge">FRAMEWORK DRIVEN</span>
+        </div>
+        <p class="desc">3D fractal volume, sliced by Z-plane. Proves 3D grid support (64³) with no ghost cells and no ping-pong.</p>
+        <div class="ctrl">
+            <label>Power</label>
+            <input type="range" id="paramPower" min="2.0" max="16.0" step="0.5" value="8.0">
+            <span class="val" id="valPower">8.0</span>
+        </div>
+        <div class="ctrl">
+            <label>Z Slice</label>
+            <input type="range" id="paramZ" min="0" max="63" step="1" value="32">
+            <span class="val" id="valZ">32</span>
+        </div>
+        <button id="btnStart">COMPUTE FRACTAL</button>
+        <div id="log"></div>
+    </div>
+    <div class="main">
+        <canvas id="c" width="64" height="64"></canvas>
+        <div class="hud">
+            <div class="hud-row"><span>STEP</span><span class="hud-val" id="hStep">0</span></div>
+            <div class="hud-row"><span>FPS</span><span class="hud-val" id="hFps">—</span></div>
+            <div class="hud-row"><span>SLICE</span><span class="hud-val" id="hSlice">—</span></div>
+        </div>
+    </div>
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
+        const canvas = document.getElementById('c');
+        const log = document.getElementById('log');
+        let engine, wgsl, running = false, fc = 0, lt = 0;
+        const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
+
+        document.getElementById('btnStart').onclick = async () => {
+            if (running) return;
+            L('[1/3] Loading manifest...');
+            const f = new GpuCoreFactory();
+            const m = await f.loadManifest('../manifests/mandelbulb_audit.json');
+            L('[2/3] Building 3D engine (64³)...');
+            engine = await f.build(m.config, m.engine);
+            L('[3/3] Loading fractal kernel...');
+            wgsl = await (await fetch('/src/kernels/wgsl/MandelbulbCore.wgsl')).text();
+            running = true; lt = performance.now();
+            L('✓ Volume rendering');
+            requestAnimationFrame(tick);
+        };
+
+        async function tick(now) {
+            if (!running) return;
+            const power = parseFloat(document.getElementById('paramPower').value);
+            const pz = parseInt(document.getElementById('paramZ').value);
+            document.getElementById('valPower').innerText = power.toFixed(1);
+            document.getElementById('valZ').innerText = pz;
+
+            engine.vGrid.config.params.p0 = 64; // nz
+            engine.vGrid.config.params.p1 = 20; // maxIter
+            engine.vGrid.config.params.p2 = power;
+
+            await engine.step({'MandelbulbCore': wgsl}, 1);
+
+            const faceIdx = engine.parityManager.getFaceIndices('fractal').base;
+            await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
+                mode: 'fractal', nx: 64, ny: 64, nz: 64,
+                pz_layer: pz,
+                faceIdx: faceIdx,
+                strideFace: engine.buffer.strideFace
+            });
+            fc++;
+            if (now - lt > 500) {
+                document.getElementById('hFps').innerText = Math.round(fc/((now-lt)/1000));
+                fc=0; lt=now;
+            }
+            document.getElementById('hStep').innerText = engine.parityManager.currentTick;
+            document.getElementById('hSlice').innerText = `Z=${pz}/63`;
+            requestAnimationFrame(tick);
+        }
+    </script>
+</body>
+</html>

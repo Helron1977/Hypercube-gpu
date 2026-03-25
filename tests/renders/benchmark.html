@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hypercube SOTA Benchmark</title>
+    <style>
+        body { background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; padding: 2rem; }
+        .box { background: #1e293b; padding: 2rem; border-radius: 8px; margin-bottom: 1rem; }
+        h1 { color: #38bdf8; margin-top: 0; }
+        #log { font-family: monospace; white-space: pre-wrap; color: #a3e635; }
+        .pulse { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>🚀 ZERO-STALL LBM BENCHMARK</h1>
+        <p>Testing D3Q19 MasterBuffer throughput on your GPU...</p>
+        <div id="status" class="pulse">Initializing WebGPU...</div>
+        <div id="log"></div>
+    </div>
+    <script type="module" src="./benchmark.ts"></script>
+</body>
+</html>

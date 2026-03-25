@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hypercube - LDC Stability Audit</title>
+    <style>
+        body { background: #0a0a0c; color: #00ffcc; font-family: 'Courier New', monospace; padding: 20px; }
+        #log { white-space: pre-wrap; background: #16161e; border: 1px solid #333; padding: 15px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        h1 { color: #fff; text-shadow: 0 0 10px #00ffcc; }
+    </style>
+</head>
+<body>
+    <h1>🔬 Lid-Driven Cavity Stability Audit (Re=1000)</h1>
+    <pre id="log">Initializing WebGPU Context...
+[WAIT] Setting up 256x256 Grid...</pre>
+
+    <script type="module">
+        const log = document.getElementById('log');
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        console.log = (...args) => {
+            log.textContent += args.join(' ') + '\n';
+            originalLog(...args);
+        };
+        console.error = (...args) => {
+            log.textContent += '❌ ' + args.join(' ') + '\n';
+            originalError(...args);
+        };
+
+        import { runLDCAudit } from '../validation/lid_driven_cavity.ts';
+        
+        async function start() {
+            const params = new URLSearchParams(window.location.search);
+            const Re = parseInt(params.get('re')) || 1000;
+            
+            try {
+                await runLDCAudit(Re);
+                document.getElementById('status').innerText = `AUDIT COMPLETE (Re=${Re}): STABLE`;
+                document.getElementById('status').style.color = '#10b981';
+            } catch (e) {
+                console.error("Audit Runtime Error:", e);
+                document.getElementById('status').innerText = 'AUDIT FAILED';
+            }
+        }
+        
+        start();
+    </script>
+</body>
+</html>

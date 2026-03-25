@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head><title>GpuDispatcher Alignment Proof</title></head>
+<body>
+    <pre id="log"></pre>
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { HypercubeGPUContext } from '/src/gpu/HypercubeGPUContext.ts';
+
+        const log = (m) => { document.getElementById('log').innerText += m + '\n'; console.log(m); };
+
+        async function runTest() {
+            try {
+                log("🚀 Starting Alignment Proof...");
+                if (!await HypercubeGPUContext.init()) {
+                    log("❌ WebGPU not supported");
+                    return;
+                }
+                HypercubeGPUContext.device.addEventListener('uncapturederror', (e) => {
+                    log("🔥 GPU Error: " + e.error.message);
+                });
+
+                const PROBE_WGSL = `
+                struct Params {
+                    nx: u32, ny: u32, lx: u32, ly: u32,
+                    t: f32, tick: u32, strideFace: u32, numFaces: u32,
+                    p0: f32, p1: f32, p2: f32, p3: f32, p4: f32, p5: f32, p6: f32, p7: f32,
+                    f0: u32, f1: u32, f2: u32, f3: u32
+                };
+                @group(0) @binding(0) var<storage, read_write> data: array<f32>;
+                @group(0) @binding(1) var<uniform> params: Params;
+
+                @compute @workgroup_size(16, 16)
+                fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+                    if (id.x == 0 && id.y == 0) {
+                        let strideFace = params.strideFace;
+                        // Start of Face 0
+                        data[params.f0 * strideFace + 0] = 777.0 + f32(params.tick);
+                        // End of Face 1 (with parity)
+                        let parity = params.tick % 2u;
+                        data[(params.f1 + parity) * strideFace + 66819] = 888.0 + f32(params.tick);
+                    }
+                }
+                `;
+
+                const factory = new GpuCoreFactory();
+                const NX = 512, NY = 128;
+                const engine = await factory.build({
+                    dimensions: { nx: NX, ny: NY, nz: 1 },
+                    chunks: { x: 1, y: 1 },
+                    boundaries: {},
+                    engine: 'prover',
+                    params: {}
+                }, {
+                    name: 'prover',
+                    version: '1.0.0',
+                    faces: [
+                        { name: 'scalar', type: 'scalar', isSynchronized: true },
+                        { name: 'pingpong', type: 'scalar', isSynchronized: true, isPingPong: true }
+                    ],
+                    rules: [
+                        { type: 'probe', params: {} }
+                    ],
+                    requirements: { ghostCells: 1, pingPong: true }
+                });
+
+                const kernels = { probe: PROBE_WGSL };
+                const LAST_IDX = (NX + 2) * (NY + 2) - 1; // 66819
+
+                // TICK 0
+                await engine.step(kernels);
+                await engine.syncFacesToHost(['scalar', 'pingpong']);
+                const s0 = engine.getFaceData('chunk_0_0_0', 'scalar')[0];
+                const p0 = engine.getFaceData('chunk_0_0_0', 'pingpong', 0)[LAST_IDX];
+                
+                log(`TICK 0: Scalar[0]=${s0}, PP_Slot0[${LAST_IDX}]=${p0}`);
+                if (s0 === 777 && p0 === 888) {
+                    log("✓ TICK 0 SUCCESS");
+                } else {
+                    throw new Error(`TICK 0 Fail: s0=${s0}, p0=${p0}`);
+                }
+
+                // TICK 1
+                await engine.step(kernels);
+                await engine.syncFacesToHost(['scalar', 'pingpong']);
+                const s1 = engine.getFaceData('chunk_0_0_0', 'scalar')[0];
+                const p1 = engine.getFaceData('chunk_0_0_0', 'pingpong', 1)[LAST_IDX];
+
+                log(`TICK 1: Scalar[0]=${s1}, PP_Slot1[${LAST_IDX}]=${p1}`);
+                if (s1 === 778 && p1 === 889) {
+                    log("✓ TICK 1 SUCCESS");
+                    log("⭐ DOUBLE-ENDED ALIGNMENT PROOF PASSED ⭐");
+                } else {
+                    throw new Error(`TICK 1 Fail: s1=${s1}, p1=${p1}`);
+                }
+
+            } catch (e) {
+                log("❌ TEST FAILED: " + e.message);
+            } finally {
+                // Pipe result back to the Node CLI Helper (WebMCP Bridge)
+                try {
+                    await fetch('http://localhost:3000', {
+                        method: 'POST',
+                        headers: { 'X-Test-Name': 'dispatcher-alignment' },
+                        body: document.getElementById('log').innerText
+                    });
+                } catch (e) {}
+                
+                const mark = document.createElement('div');
+                mark.id = "validation-done";
+                document.body.appendChild(mark);
+            }
+        }
+
+        runTest();
+    </script>
+</body>
+</html>

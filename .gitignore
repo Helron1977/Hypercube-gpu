@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+.DS_Store
+*.log
+perf_log.txt
+benchmark_results/
+walkthrough.md

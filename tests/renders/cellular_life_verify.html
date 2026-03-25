@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU — Game of Life Audit</title>
+    <style>
+        * { margin: 0; box-sizing: border-box; }
+        body { background: #050508; color: #eee; font-family: 'Inter', system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 320px; background: #08080c; border-right: 1px solid #1a1a2e; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+        .main { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        canvas { background: #000; border-radius: 8px; width: 512px; height: 512px; image-rendering: pixelated; box-shadow: 0 0 80px rgba(0,255,100,0.06); }
+        .hud { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.92); border: 1px solid #00ff66; padding: 16px 20px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; min-width: 220px; pointer-events: none; }
+        .hud-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .hud-val { color: #00ff66; font-weight: 800; }
+        h1 { font-size: 1rem; color: #00ff66; letter-spacing: 0.15em; text-transform: uppercase; border-bottom: 1px solid #1a1a2e; padding-bottom: 10px; }
+        .badge { display: inline-block; background: #00ff6620; color: #00ff66; font-size: 0.6rem; padding: 3px 8px; border-radius: 3px; font-weight: 800; letter-spacing: 0.1em; }
+        button { background: #00ff66; color: #000; border: none; padding: 14px; border-radius: 6px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; transition: all 0.15s; }
+        button:hover { background: #33ff88; transform: translateY(-1px); }
+        .desc { font-size: 0.7rem; color: #555; line-height: 1.5; }
+        #log { font-size: 0.6rem; color: #444; font-family: monospace; max-height: 140px; overflow-y: auto; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div>
+            <h1>GAME OF LIFE</h1>
+            <span class="badge">FRAMEWORK DRIVEN</span>
+        </div>
+        <p class="desc">Conway's Game of Life on GPU. Random seed → emergent patterns. Proves cellular automata via ping-pong dispatch.</p>
+        <button id="btnStart">SEED LIFE</button>
+        <div id="log"></div>
+    </div>
+    <div class="main">
+        <canvas id="c" width="256" height="256"></canvas>
+        <div class="hud">
+            <div class="hud-row"><span>GEN</span><span class="hud-val" id="hStep">0</span></div>
+            <div class="hud-row"><span>FPS</span><span class="hud-val" id="hFps">—</span></div>
+            <div class="hud-row"><span>ALIVE</span><span class="hud-val" id="hAlive">—</span></div>
+        </div>
+    </div>
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
+        const canvas = document.getElementById('c');
+        const log = document.getElementById('log');
+        let engine, wgsl, running = false, fc = 0, lt = 0;
+        const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
+
+        document.getElementById('btnStart').onclick = async () => {
+            if (running) return;
+            L('[1/4] Loading manifest...');
+            const f = new GpuCoreFactory();
+            const m = await f.loadManifest('../manifests/cellular_audit.json');
+            L('[2/4] Building engine...');
+            engine = await f.build(m.config, m.engine);
+            const cells = engine.buffer.layout.cellsPerFaceRaw;
+
+            L('[3/4] Random seeding (30% density)...');
+            const s0 = new Float32Array(cells);
+            for (let i = 0; i < cells; i++) s0[i] = Math.random() < 0.3 ? 1.0 : 0.0;
+            engine.setFaceData('chunk_0_0_0', 's', s0, true);
+            engine.syncToDevice();
+
+            L('[4/4] Loading kernel...');
+            wgsl = await (await fetch('/src/kernels/wgsl/CellularCore.wgsl')).text();
+            running = true; lt = performance.now();
+            L('✓ Life seeded');
+            requestAnimationFrame(tick);
+        };
+
+        async function tick(now) {
+            if (!running) return;
+            await engine.step({'CellularCore': wgsl}, 1);
+
+            const res = await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
+                mode: 'single', nx: 256, ny: 256,
+                faceIdx: engine.parityManager.getFaceIndices('s').read,
+                strideFace: engine.buffer.strideFace, scale: 1.0
+            });
+            fc++;
+            if (now - lt > 500) {
+                document.getElementById('hFps').innerText = Math.round(fc/((now-lt)/1000));
+                fc=0; lt=now;
+            }
+            document.getElementById('hStep').innerText = engine.parityManager.currentTick;
+            if (res?.results) {
+                let alive = 0;
+                const sf = engine.buffer.strideFace;
+                const ri = engine.parityManager.getFaceIndices('s').read;
+                for (let i = 0; i < sf; i++) if (res.results[ri*sf+i] > 0.5) alive++;
+                document.getElementById('hAlive').innerText = alive.toLocaleString();
+            }
+            requestAnimationFrame(tick);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU - LBM Scientific Audit (Framework Driven)</title>
+    <style>
+        body { margin: 0; background: #050505; color: #eee; font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 340px; background: #0a0a0a; border-right: 1px solid #1a1a1a; padding: 25px; display: flex; flex-direction: column; gap: 20px; z-index: 10; box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
+        .main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: #000; }
+        canvas { background: #000; border: 1px solid #333; cursor: crosshair; width: 1024px; height: 512px; image-rendering: pixelated; box-shadow: 0 0 100px rgba(0,255,180,0.05); }
+        .hud { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.95); border: 1px solid #00ffb4; padding: 20px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; min-width: 280px; pointer-events: none; text-shadow: 0 0 5px #00ffb4; box-shadow: 0 0 40px rgba(0,255,180,0.1); }
+        .hud-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem; }
+        .hud-val { color: #00ffb4; font-weight: 900; }
+        h1 { font-size: 1.1rem; color: #00ffb4; margin: 0; letter-spacing: 0.15em; text-transform: uppercase; border-bottom: 1px solid #1a1a1a; padding-bottom: 10px; }
+        .control-group { display: flex; flex-direction: column; gap: 6px; }
+        label { font-size: 0.7rem; color: #666; text-transform: uppercase; font-weight: 800; }
+        input[type="range"] { width: 100%; accent-color: #00ffb4; }
+        .stats { font-family: monospace; font-size: 0.8rem; color: #00ffb4; }
+        .btn-group { display: flex; gap: 10px; }
+        button { flex: 1; background: #00ffb4; color: #000; border: none; padding: 16px; border-radius: 4px; font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 0.8rem; text-transform: uppercase; }
+        button:hover { background: #00f0a0; transform: translateY(-2px); }
+        .mode-selector { display: flex; border: 1px solid #333; border-radius: 4px; overflow: hidden; }
+        .mode-btn { flex: 1; padding: 12px; font-size: 0.7rem; background: #111; border: none; color: #555; cursor: pointer; font-weight: bold; }
+        .mode-btn.active { background: #00ffb4; color: #000; }
+        #log { font-size: 0.65rem; color: #555; font-family: monospace; max-height: 120px; overflow-y: auto; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h1>LBM FRAMEWORK AUDIT</h1>
+        <div class="control-group">
+            <label>Visualization</label>
+            <div class="mode-selector">
+                <button class="mode-btn active" onclick="setMode('u_mag', this)">VELOCITY</button>
+                <button class="mode-btn" onclick="setMode('curl', this)">VORTICITY</button>
+                <button class="mode-btn" onclick="setMode('single', this)">DENSITY</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Relaxation (&omega;)</label>
+            <input type="range" id="paramOmega" min="1.0" max="1.99" step="0.01" value="1.85">
+            <span class="stats" id="valOmega">1.85</span>
+        </div>
+        <div class="control-group">
+            <label>Inlet Velocity</label>
+            <input type="range" id="paramInflow" min="0.01" max="0.30" step="0.01" value="0.12">
+            <span class="stats" id="valInflow">0.12</span>
+        </div>
+        <div class="btn-group">
+            <button id="btnStart">BUILD ENGINE</button>
+        </div>
+        <div id="log"></div>
+        <div style="color: #444; font-size: 0.6rem; margin-top: auto;">
+            CORE: HYPERCUBE GPU<br>
+            MODE: MANIFEST-DRIVEN<br>
+            BOUNDARY CODES: types.ts aligned
+        </div>
+    </div>
+
+    <div class="main">
+        <canvas id="renderCanvas" width="512" height="256"></canvas>
+        <div class="hud" style="border: 1px solid #333; box-shadow: none; text-shadow: none; font-size: 0.75rem;">
+            <div class="hud-item"><span>STEP</span><span class="hud-val" id="hud-step">0</span></div>
+            <div class="hud-item"><span>PERF (MLUPS)</span><span class="hud-val" id="hud-mlups">-</span></div>
+            <div class="hud-item"><span>V&V: DRIFT</span><span class="hud-val" id="hud-drift">-</span></div>
+            <div class="hud-item" style="color:#666; font-size: 0.65rem;">[x,y]: <span id="probe-pos">-</span></div>
+            <div class="hud-item" style="color:#666; font-size: 0.65rem;">&rho;: <span id="probe-rho">-</span></div>
+            <div class="hud-item" style="color:#666; font-size: 0.65rem;">Vel: <span id="probe-vel">-</span></div>
+            <div class="hud-item" style="color:#666; font-size: 0.65rem;">Curl: <span id="probe-curl">-</span></div>
+            <div id="hud-fps" style="display:none"></div>
+            <div id="hud-mass" style="display:none"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
+
+        const canvas = document.getElementById('renderCanvas');
+        const log = document.getElementById('log');
+        let engine = null;
+        let isRunning = false;
+        let renderMode = 'u_mag';
+        let probePoint = { x: 200, y: 128 };
+        let kernelSource = null; // Cache kernel — fetch once
+        let strideFace = 0;
+        let lx = 0, ly = 0;
+        let frameCount = 0;
+        let lastFpsTime = 0;
+        let reductionSource = null;
+        let initialMass = 0;
+        let manifest = null;
+        let ghosts = 0;
+
+        const logMsg = (msg) => { log.textContent += msg + '\n'; log.scrollTop = log.scrollHeight; console.log(msg); };
+
+        window.setMode = (mode, btn) => {
+            renderMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        };
+
+        canvas.onclick = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            probePoint = {
+                x: Math.floor((e.clientX - rect.left) / rect.width * 512),
+                y: Math.floor((e.clientY - rect.top) / rect.height * 256)
+            };
+        };
+
+        async function start() {
+            if (isRunning) return;
+            try {
+                logMsg('[1/5] Chargement du manifest...');
+                const factory = new GpuCoreFactory();
+                manifest = await factory.loadManifest('../manifests/lbm_audit.json');
+
+                logMsg('[2/5] Construction du GpuEngine...');
+                engine = await factory.build(manifest.config, manifest.engine);
+
+                // IMPORTANT : utiliser le strideFace du framework, PAS lx*ly
+                const { nx, ny } = manifest.config.dimensions;
+                ghosts = manifest.engine.requirements.ghostCells;
+                lx = nx + 2 * ghosts;
+                ly = ny + 2 * ghosts;
+                strideFace = engine.buffer.strideFace;
+                logMsg(`   Grid: ${nx}x${ny}, lx=${lx}, ly=${ly}`);
+                logMsg(`   strideFace (framework aligned): ${strideFace}`);
+                logMsg(`   strideFace (raw lx*ly): ${lx * ly}`);
+                logMsg(`   totalSlots: ${engine.buffer.totalSlotsPerChunk}`);
+
+                logMsg('[3/5] Initialisation des populations D2Q9...');
+                const cellCount = engine.buffer.layout.cellsPerFaceRaw;
+                const W = [4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36];
+                for (let d = 0; d < 9; d++) {
+                    const temp = new Float32Array(cellCount).fill(W[d]);
+                    engine.setFaceData('chunk_0_0_0', `f_d${d}`, temp, true);
+                }
+                engine.setFaceData('chunk_0_0_0', 'rho', new Float32Array(cellCount).fill(1.0));
+
+                // Obstacle circulaire
+                const obsData = new Float32Array(cellCount);
+                const cx_obs = 80, cy_obs = Math.floor(ny / 2), r2 = 20 * 20;
+                for (let y = 0; y < ly; y++) {
+                    for (let x = 0; x < lx; x++) {
+                        const dx = (x - ghosts) - cx_obs;
+                        const dy = (y - ghosts) - cy_obs;
+                        if (dx*dx + dy*dy < r2) obsData[y * lx + x] = 1.0;
+                    }
+                }
+                engine.setFaceData('chunk_0_0_0', 'obs', obsData);
+
+                // CRITICAL : pousser toutes les données CPU vers le GPU
+                engine.syncToDevice();
+                logMsg('   syncToDevice() OK');
+
+                // --- NEW: KERNEL CONSOLIDATION ---
+                logMsg('[4/5] Chargement des kernels (LBM + Réduction)...');
+                const respLbm = await fetch('/src/kernels/wgsl/LbmCore.wgsl');
+                kernelSource = await respLbm.text();
+                logMsg(`   LbmCore: ${kernelSource.length} chars`);
+                
+                const respRed = await fetch('/src/kernels/wgsl/ReductionCore.wgsl');
+                reductionSource = await respRed.text();
+                logMsg(`   ReductionCore: ${reductionSource.length} chars`);
+
+                logMsg('[5/5] Démarrage de la boucle de simulation ✓');
+                isRunning = true;
+                lastFpsTime = performance.now();
+                requestAnimationFrame(frame);
+
+            } catch (err) {
+                logMsg(`ERREUR: ${err.message}`);
+                console.error(err);
+            }
+        }
+
+        async function frame(now) {
+            if (!isRunning) return;
+
+            // Paramètres UI
+            const omega = parseFloat(document.getElementById('paramOmega').value);
+            const inflow = parseFloat(document.getElementById('paramInflow').value);
+            document.getElementById('valOmega').innerText = omega.toFixed(2);
+            document.getElementById('valInflow').innerText = inflow.toFixed(2);
+            engine.vGrid.config.params.omega = omega;
+            engine.vGrid.config.params.inflow = inflow;
+
+            // Step le moteur via le framework (kernel déjà caché)
+            await engine.step({ 'LbmScientific': kernelSource });
+
+            // Rendu via GpuDemoHelper — le buffer du framework
+            // Face layout (base slots) : obs=0, ux=1, uy=2, rho=3, curl=4
+            const physicsData = await GpuDemoHelper.renderToCanvas(
+                engine.dispatcher.device,
+                engine.buffer.gpuBuffer,
+                canvas, {
+                    mode: renderMode,
+                    nx: 512, ny: 256,
+                    faces: [1, 2],        // ux(slot 1), uy(slot 2) pour u_mag
+                    faceIdx: (renderMode === 'curl' ? 4 : (renderMode === 'single' ? 3 : -1)),
+                    strideFace: strideFace,
+                    scale: (renderMode === 'curl' ? 10.0 : 1.5)
+                }
+            );
+
+            // HUD (update every 10 ticks)
+            frameCount++;
+            const tick = engine.parityManager.currentTick;
+            if (tick % 10 === 0) {
+                const elapsed = now - lastFpsTime;
+                if (elapsed > 500) {
+                    document.getElementById('hud-fps').innerText = Math.round(frameCount / (elapsed / 1000));
+                    frameCount = 0;
+                    lastFpsTime = now;
+                }
+                document.getElementById('hud-step').innerText = tick;
+                
+                // --- NEW: SCIENTIFIC MONITORING ---
+                try {
+                   engine.vGrid.config.params.p0 = 3; // On cible la face rho
+                   const currentMass = await engine.reduceField('rho', reductionSource);
+                   if (initialMass === 0 || initialMass < 1) initialMass = currentMass;
+                   const drift = (currentMass - initialMass) / initialMass;
+                
+                   document.getElementById('hud-mass').innerText = currentMass.toFixed(4);
+                   document.getElementById('hud-drift').innerText = (drift * 100).toExponential(3) + '%';
+                   document.getElementById('hud-drift').style.color = Math.abs(drift) < 1e-6 ? '#00ffb4' : '#ff4400';
+
+                   // PERFORMANCE (MLUPS)
+                   const mlups = (manifest.config.dimensions.nx * manifest.config.dimensions.ny * 10) / (elapsed * 1000);
+                   document.getElementById('hud-mlups').innerText = mlups.toFixed(2);
+                } catch (reduceErr) {
+                   console.warn('LBM V&V Reduction Failed:', reduceErr);
+                }
+
+                const i_probe = (probePoint.y + ghosts) * lx + (probePoint.x + ghosts);
+                if (physicsData && physicsData.results) {
+                    const r = physicsData.results;
+                    const rho = r[3 * strideFace + i_probe];
+                    const vx  = r[1 * strideFace + i_probe];
+                    const vy  = r[2 * strideFace + i_probe];
+                    const curl= r[4 * strideFace + i_probe];
+                    document.getElementById('probe-pos').innerText = `${probePoint.x}, ${probePoint.y}`;
+                    document.getElementById('probe-rho').innerText = isNaN(rho) ? 'NaN!' : rho.toFixed(6);
+                    document.getElementById('probe-vel').innerText = `[${vx?.toFixed(4)}, ${vy?.toFixed(4)}]`;
+                    document.getElementById('probe-curl').innerText = isNaN(curl) ? 'NaN!' : curl.toExponential(3);
+                }
+            }
+            requestAnimationFrame(frame);
+        }
+
+        document.getElementById('btnStart').onclick = start;
+    </script>
+</body>
+</html>

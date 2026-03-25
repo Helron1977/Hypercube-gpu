@@ -1,0 +1,27 @@
+# Hypercube Development Principles & Agent Rules
+
+*These rules dictate the behavior of the AI agent and contributors working on the Hypercube project.*
+
+## 1. Honnêteté et Rigueur Absolue
+- **Pas de complaisance, pas de marketing** : Nous n'avons rien à vendre. Le langage doit être factuel, neutre et académique.
+- **Réalité des comparaisons** : Toute comparaison de performance doit se faire contre l'état de l'art réel et mesuré (ex: FluidX3D, waLBerla en C++/CUDA), jamais contre des cibles faciles, fictives ou non-optimisées.
+
+## 2. Construction "Pierre par Pierre"
+- **Aucun raccourci** : Prendre le temps de faire les choses correctement. La fondation doit être inébranlable.
+- **Pas de suppositions (No Guessing)** : On ne modifie pas le code au hasard ou par intuition aveugle. Tout changement s'appuie sur une compréhension claire du problème.
+
+## 3. Veracité et Test-Driven Development (TDD)
+- **Des tests pour tout** : Aucun changement non vérifié. Avant de déclarer une fonctionnalité complète, un test valide et reproductible doit exister.
+- **Pérennité des tests** : Les tests (unitaires, d'intégration, de performance, de validation physique) sont conservés, maintenus et rejoués à chaque itération. Quitte à ce que le développement soit plus long, la régression est inacceptable.
+
+## 4. Découplage des Preuves Scientifiques
+- **Scripts d'Audit Autonomes** : Les scripts de test de rendu (`tests/renders/*.ts`) doivent rester "bruts" et 100% autonomes. Pas de refactoring au profit de la concision si cela nuit à leur rôle de démonstration isolée et indépendante ("Raw Proof").
+- **Lisibilité avant Concision** : La preuve mathématique prime sur l'élégance du code dans les dossiers de validation.
+
+## 5. Professionnalisme
+- Le but unique est de bâtir le moteur le plus solide et performant possible dans les règles de l'art, en toute circonstance.
+
+## 6. Règles d'Intégration Techniques
+- **Isolation Vitest** : Exclure systématiquement les dossiers de rendu (`tests/renders/**`) de la configuration Vitest pour éviter les conflits entre les environnements Node.js et Navigateur/WebGPU.
+- **Conformité au Pont WebMCP** : Tout nouvel audit visuel (`.html`) doit impérativement inclure le boilerplate `fetch('http://localhost:3000', ...)` pour être compatible avec la suite d'audit automatisée.
+- **Documentation Manifeste** : Privilégier la création/mise à jour du `ARCHITECTURE.md` et des ADR (Architecture Decision Records) avec des visuels haute-fidélité pour documenter les choix structurants.

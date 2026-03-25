@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Chunk Halo Sync Validation - Hypercube Neo</title>
+    <style>
+        body { background: #111; color: #eee; font-family: 'Inter', sans-serif; padding: 20px; }
+        h1 { color: #00f2ff; }
+        pre { background: #222; padding: 15px; border-radius: 8px; border: 1px solid #333; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Hypercube multi-chunk Halo Sync Validation</h1>
+    <p>Running Poiseuille Flow split across 2 chunks (256x64x1). Assertion: Continuity at x=128.</p>
+    <pre id="log"></pre>
+    <script type="module" src="./verify_multichunk.ts"></script>
+    <script type="module">
+        const logEl = document.getElementById('log');
+        const oldLog = console.log;
+        console.log = (...args) => {
+            logEl.textContent += args.join(' ') + '\n';
+            oldLog(...args);
+        };
+        const oldError = console.error;
+        console.error = (...args) => {
+            logEl.textContent += 'ERROR: ' + args.join(' ') + '\n';
+            oldError(...args);
+        };
+    </script>
+</body>
+</html>

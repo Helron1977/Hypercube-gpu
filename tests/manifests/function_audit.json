@@ -1,0 +1,20 @@
+{
+  "config": {
+    "dimensions": { "nx": 256, "ny": 256, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "wall" } },
+    "engine": "function-verify",
+    "params": { "radius": 6.28, "cx": 0.0, "cy": 0.0, "cz": 0.0, "scale": 1.0 }
+  },
+  "engine": {
+    "name": "function-verify",
+    "version": "1.0",
+    "requirements": { "ghostCells": 1, "pingPong": false },
+    "faces": [
+      { "name": "out", "type": "scalar", "isSynchronized": false }
+    ],
+    "rules": [
+      { "type": "FunctionCore", "source": "/src/kernels/wgsl/FunctionCore.wgsl" }
+    ]
+  }
+}

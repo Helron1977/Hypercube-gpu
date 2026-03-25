@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU — Math Function Audit</title>
+    <style>
+        * { margin: 0; box-sizing: border-box; }
+        body { background: #050508; color: #eee; font-family: 'Inter', system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 320px; background: #08080c; border-right: 1px solid #1a1a2e; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+        .main { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        canvas { background: #000; border-radius: 8px; width: 512px; height: 512px; image-rendering: pixelated; box-shadow: 0 0 80px rgba(255,0,100,0.06); }
+        .hud { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.92); border: 1px solid #ff0066; padding: 16px 20px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; min-width: 220px; pointer-events: none; }
+        .hud-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .hud-val { color: #ff0066; font-weight: 800; }
+        h1 { font-size: 1rem; color: #ff0066; letter-spacing: 0.15em; text-transform: uppercase; border-bottom: 1px solid #1a1a2e; padding-bottom: 10px; }
+        .badge { display: inline-block; background: #ff006620; color: #ff0066; font-size: 0.6rem; padding: 3px 8px; border-radius: 3px; font-weight: 800; letter-spacing: 0.1em; }
+        .ctrl { display: flex; flex-direction: column; gap: 6px; }
+        label { font-size: 0.65rem; color: #666; text-transform: uppercase; font-weight: 800; letter-spacing: 0.08em; }
+        input[type="range"] { width: 100%; accent-color: #ff0066; }
+        .val { font-family: monospace; font-size: 0.8rem; color: #ff0066; }
+        button { background: #ff0066; color: #fff; border: none; padding: 14px; border-radius: 6px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; transition: all 0.15s; }
+        button:hover { background: #ff3388; transform: translateY(-1px); }
+        .desc { font-size: 0.7rem; color: #555; line-height: 1.5; }
+        #log { font-size: 0.6rem; color: #444; font-family: monospace; max-height: 140px; overflow-y: auto; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div>
+            <h1>MATH FUNCTION</h1>
+            <span class="badge">FRAMEWORK DRIVEN</span>
+        </div>
+        <p class="desc">Static sin(x)·cos(y) evaluated on GPU. No ghost cells — proves zero-overhead kernel dispatch.</p>
+        <div class="ctrl">
+            <label>Scale (zoom)</label>
+            <input type="range" id="paramScale" min="1.0" max="20.0" step="0.5" value="6.28">
+            <span class="val" id="valScale">6.28</span>
+        </div>
+        <div class="ctrl">
+            <label>Frequency</label>
+            <input type="range" id="paramFreq" min="1.0" max="30.0" step="1.0" value="10.0">
+            <span class="val" id="valFreq">10.0</span>
+        </div>
+        <button id="btnStart">EVALUATE</button>
+        <div id="log"></div>
+    </div>
+    <div class="main">
+        <canvas id="c" width="256" height="256"></canvas>
+        <div class="hud">
+            <div class="hud-row"><span>FRAME</span><span class="hud-val" id="hStep">0</span></div>
+            <div class="hud-row"><span>FPS</span><span class="hud-val" id="hFps">—</span></div>
+        </div>
+    </div>
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
+        const canvas = document.getElementById('c');
+        const log = document.getElementById('log');
+        let engine, wgsl, running = false, fc = 0, lt = 0;
+        const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
+
+        document.getElementById('btnStart').onclick = async () => {
+            if (running) return;
+            L('[1/3] Loading manifest...');
+            const f = new GpuCoreFactory();
+            const m = await f.loadManifest('../manifests/function_audit.json');
+            L('[2/3] Building engine...');
+            engine = await f.build(m.config, m.engine);
+            L('[3/3] Loading kernel...');
+            wgsl = await (await fetch('/src/kernels/wgsl/FunctionCore.wgsl')).text();
+            running = true; lt = performance.now();
+            L('✓ Function evaluating');
+            requestAnimationFrame(tick);
+        };
+
+        async function tick(now) {
+            if (!running) return;
+            const scale = parseFloat(document.getElementById('paramScale').value);
+            const freq = parseFloat(document.getElementById('paramFreq').value);
+            document.getElementById('valScale').innerText = scale.toFixed(1);
+            document.getElementById('valFreq').innerText = freq.toFixed(0);
+            engine.vGrid.config.params.p0 = scale;
+            engine.vGrid.config.params.p1 = freq;
+
+            // Step with 1 iteration (static)
+            await engine.step({'FunctionCore': wgsl}, 1);
+
+            await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
+                mode: 'bipolar', nx: 256, ny: 256,
+                faceIdx: 0,
+                strideFace: engine.buffer.strideFace, scale: 200.0
+            });
+            fc++;
+            if (now - lt > 500) {
+                document.getElementById('hFps').innerText = Math.round(fc/((now-lt)/1000));
+                fc=0; lt=now;
+            }
+            document.getElementById('hStep').innerText = engine.parityManager.currentTick;
+            requestAnimationFrame(tick);
+        }
+    </script>
+</body>
+</html>

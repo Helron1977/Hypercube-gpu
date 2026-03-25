@@ -1,0 +1,19 @@
+{
+  "config": {
+    "dimensions": { "nx": 128, "ny": 128, "nz": 1 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": { "all": { "role": "wall" } },
+    "engine": "jfa-verify",
+    "params": { "stepSize": 64 }
+  },
+  "engine": {
+    "name": "jfa-verify",
+    "requirements": { "ghostCells": 1, "pingPong": true },
+    "faces": [
+      { "name": "uv", "type": "field", "isSynchronized": true }
+    ],
+    "rules": [
+      { "type": "JfaCore", "source": "/src/kernels/wgsl/JfaCore.wgsl", "faces": ["uv.read", "uv.write"] }
+    ]
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "models": {
+    "LbmCore": {
+      "requirements": { "ghostCells": 1, "pingPong": true },
+      "faces": [
+        { "name": "f", "type": "population", "isSynchronized": true }
+      ],
+      "params": ["omega", "inflow", "viscosity"]
+    },
+    "LbmScientific": {
+      "requirements": { "ghostCells": 1, "pingPong": true },
+      "faces": [
+        { "name": "obs", "type": "mask", "isSynchronized": false },
+        { "name": "ux", "type": "macro", "isSynchronized": false },
+        { "name": "uy", "type": "macro", "isSynchronized": false },
+        { "name": "rho", "type": "scalar", "isSynchronized": false },
+        { "name": "curl", "type": "scalar", "isSynchronized": false },
+        { "name": "f_d0", "type": "population", "isSynchronized": true },
+        { "name": "f_d1", "type": "population", "isSynchronized": true },
+        { "name": "f_d2", "type": "population", "isSynchronized": true },
+        { "name": "f_d3", "type": "population", "isSynchronized": true },
+        { "name": "f_d4", "type": "population", "isSynchronized": true },
+        { "name": "f_d5", "type": "population", "isSynchronized": true },
+        { "name": "f_d6", "type": "population", "isSynchronized": true },
+        { "name": "f_d7", "type": "population", "isSynchronized": true },
+        { "name": "f_d8", "type": "population", "isSynchronized": true }
+      ],
+      "params": ["omega", "inflow"]
+    },
+    "Lbm3DCore": {
+      "requirements": { "ghostCells": 1, "pingPong": true },
+      "faces": [
+        { "name": "f", "type": "population", "isSynchronized": true }
+      ],
+      "params": ["omega", "inflow", "viscosity"]
+    },
+    "TensorCore": {
+      "requirements": { "ghostCells": 0, "pingPong": false },
+      "faces": [
+        { "name": "a", "type": "scalar", "isSynchronized": false },
+        { "name": "b", "type": "scalar", "isSynchronized": false },
+        { "name": "out", "type": "scalar", "isSynchronized": false }
+      ],
+      "params": ["alpha", "beta"]
+    },
+    "DiffusionCore": {
+      "requirements": { "ghostCells": 1, "pingPong": true },
+      "faces": [
+        { "name": "t", "type": "field", "isSynchronized": true }
+      ],
+      "params": ["kappa", "dt"]
+    },
+    "CellularCore": {
+      "requirements": { "ghostCells": 1, "pingPong": true },
+      "faces": [
+        { "name": "s", "type": "scalar", "isSynchronized": true }
+      ],
+      "params": ["birthMin", "birthMax", "survivalMin", "survivalMax"]
+    },
+    "FdtdCore": {
+      "requirements": { "ghostCells": 1, "pingPong": false },
+      "faces": [
+        { "name": "Ez", "type": "field", "isSynchronized": true },
+        { "name": "Hx", "type": "field", "isSynchronized": true },
+        { "name": "Hy", "type": "field", "isSynchronized": true }
+      ],
+      "params": ["dt_eps", "dt_mu", "_pad", "srcX", "srcY", "srcVal"]
+    },
+    "PoissonCore": {
+      "requirements": { "ghostCells": 1, "pingPong": true },
+      "faces": [
+        { "name": "phi", "type": "field", "isSynchronized": true },
+        { "name": "rhs", "type": "field", "isSynchronized": true }
+      ],
+      "params": ["dx"]
+    },
+    "WaveCore": {
+      "requirements": { "ghostCells": 1, "pingPong": true },
+      "faces": [
+        { "name": "uNow", "type": "field", "isSynchronized": true },
+        { "name": "uOld", "type": "field", "isSynchronized": true },
+        { "name": "uNext", "type": "field", "isSynchronized": true }
+      ],
+      "params": ["c2", "dt", "dx"]
+    },
+    "JfaCore": {
+      "requirements": { "ghostCells": 1, "pingPong": true },
+      "faces": [
+        { "name": "uv", "type": "field", "isSynchronized": true }
+      ],
+      "params": ["stepSize"]
+    },
+    "FunctionCore": {
+      "requirements": { "ghostCells": 0, "pingPong": false },
+      "faces": [
+        { "name": "out", "type": "scalar", "isSynchronized": false }
+      ],
+      "params": ["radius", "cx", "cy", "cz", "scale"]
+    },
+    "MandelbulbCore": {
+      "requirements": { "ghostCells": 0, "pingPong": false },
+      "faces": [
+        { "name": "fractal", "type": "scalar", "isSynchronized": false }
+      ],
+      "params": ["nz", "maxIter", "power"]
+    },
+    "NoiseCore": {
+      "requirements": { "ghostCells": 1, "pingPong": false },
+      "faces": [
+        { "name": "noise", "type": "field", "isSynchronized": true }
+      ],
+      "params": ["scale", "octaves"]
+    }
+  }
+}

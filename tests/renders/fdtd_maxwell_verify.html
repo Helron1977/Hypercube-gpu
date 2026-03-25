@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU — FDTD Maxwell Audit</title>
+    <style>
+        * { margin: 0; box-sizing: border-box; }
+        body { background: #050508; color: #eee; font-family: 'Inter', system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 320px; background: #08080c; border-right: 1px solid #1a1a2e; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+        .main { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        canvas { background: #000; border-radius: 8px; width: 512px; height: 512px; image-rendering: pixelated; box-shadow: 0 0 80px rgba(0,200,255,0.08); }
+        .hud { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.92); border: 1px solid #00ccff; padding: 16px 20px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; min-width: 220px; pointer-events: none; }
+        .hud-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .hud-val { color: #00ccff; font-weight: 800; }
+        h1 { font-size: 1rem; color: #00ccff; letter-spacing: 0.15em; text-transform: uppercase; border-bottom: 1px solid #1a1a2e; padding-bottom: 10px; }
+        .badge { display: inline-block; background: #00ccff20; color: #00ccff; font-size: 0.6rem; padding: 3px 8px; border-radius: 3px; font-weight: 800; letter-spacing: 0.1em; }
+        .ctrl { display: flex; flex-direction: column; gap: 6px; }
+        label { font-size: 0.65rem; color: #666; text-transform: uppercase; font-weight: 800; letter-spacing: 0.08em; }
+        input[type="range"] { width: 100%; accent-color: #00ccff; }
+        .val { font-family: monospace; font-size: 0.8rem; color: #00ccff; }
+        button { background: #00ccff; color: #000; border: none; padding: 14px; border-radius: 6px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; transition: all 0.15s; }
+        button:hover { background: #33ddff; transform: translateY(-1px); }
+        .desc { font-size: 0.7rem; color: #555; line-height: 1.5; }
+        #log { font-size: 0.6rem; color: #444; font-family: monospace; max-height: 140px; overflow-y: auto; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div>
+            <h1>FDTD MAXWELL</h1>
+            <span class="badge">FRAMEWORK DRIVEN</span>
+        </div>
+        <p class="desc">Finite-Difference Time-Domain electromagnetics. Central sine source → expanding EM waves. Proves multi-face (Ez/Hx/Hy) non-pingpong dispatch.</p>
+        <div class="ctrl">
+            <label>Wave Speed</label>
+            <input type="range" id="paramC" min="0.05" max="0.5" step="0.01" value="0.20">
+            <span class="val" id="valC">0.20</span>
+        </div>
+        <div class="ctrl">
+            <label>Source Frequency</label>
+            <input type="range" id="paramFreq" min="1.0" max="20.0" step="1.0" value="8.0">
+            <span class="val" id="valFreq">8.0</span>
+        </div>
+        <button id="btnStart">ENGAGE FIELDS</button>
+        <div id="log"></div>
+    </div>
+    <div class="main">
+        <canvas id="c" width="128" height="128"></canvas>
+        <div class="hud">
+            <div class="hud-row"><span>STEP</span><span class="hud-val" id="hStep">0</span></div>
+            <div class="hud-row"><span>FPS</span><span class="hud-val" id="hFps">—</span></div>
+        </div>
+    </div>
+    <script type="module">
+        import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
+        import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
+        const canvas = document.getElementById('c');
+        const log = document.getElementById('log');
+        let engine, wgslE, wgslH, running = false, fc = 0, lt = 0;
+        const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
+
+        document.getElementById('btnStart').onclick = async () => {
+            if (running) return;
+            L('[1/3] Loading manifest...');
+            const f = new GpuCoreFactory();
+            const m = await f.loadManifest('../manifests/fdtd_audit.json');
+            L('[2/3] Building engine...');
+            engine = await f.build(m.config, m.engine);
+            L('[3/3] Loading kernels (E + H)...');
+            wgslE = await (await fetch('/src/kernels/wgsl/FdtdUpdateE.wgsl')).text();
+            wgslH = await (await fetch('/src/kernels/wgsl/FdtdUpdateH.wgsl')).text();
+            running = true; lt = performance.now();
+            L('✓ EM fields active');
+            requestAnimationFrame(tick);
+        };
+
+        async function tick(now) {
+            if (!running) return;
+            const c = parseFloat(document.getElementById('paramC').value);
+            const freq = parseFloat(document.getElementById('paramFreq').value);
+            document.getElementById('valC').innerText = c.toFixed(2);
+            document.getElementById('valFreq').innerText = freq.toFixed(0);
+
+            // p0=dt_eps, p1=dt_mu, p2=_pad, p3=srcX, p4=srcY, p5=srcVal
+            engine.vGrid.config.params.p0 = c;     // dt_eps
+            engine.vGrid.config.params.p1 = c;     // dt_mu
+            engine.vGrid.config.params.p3 = 64;    // srcX
+            engine.vGrid.config.params.p4 = 64;    // srcY
+            engine.vGrid.config.params.p5 = Math.sin(now / 1000 * Math.PI * 2 * freq) * 0.5; // srcVal
+
+            await engine.step({'FdtdUpdateE': wgslE, 'FdtdUpdateH': wgslH}, 1);
+
+            const faceIdx = engine.parityManager.getFaceIndices('Ez').base;
+            await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
+                mode: 'bipolar', nx: 128, ny: 128,
+                faceIdx: faceIdx,
+                strideFace: engine.buffer.strideFace, scale: 200.0
+            });
+            fc++;
+            if (now - lt > 500) {
+                document.getElementById('hFps').innerText = Math.round(fc/((now-lt)/1000));
+                fc=0; lt=now;
+            }
+            document.getElementById('hStep').innerText = engine.parityManager.currentTick;
+            requestAnimationFrame(tick);
+        }
+    </script>
+</body>
+</html>
