@@ -1,0 +1,1178 @@
+var F = Object.defineProperty;
+var I = (P, t, i) => t in P ? F(P, t, { enumerable: !0, configurable: !0, writable: !0, value: i }) : P[t] = i;
+var B = (P, t, i) => I(P, typeof t != "symbol" ? t + "" : t, i);
+const K = {
+  joint: 0,
+  periodic: 1,
+  wall: 2,
+  inflow: 3,
+  outflow: 4,
+  symmetry: 5,
+  absorbing: 6,
+  clamped: 7,
+  dirichlet: 8,
+  neumann: 9,
+  moving_wall: 10
+};
+class L {
+  constructor(t, i, f, c) {
+    this.vGrid = t, this.buffer = i, this.dispatcher = f, this.parityManager = c;
+  }
+  /**
+   * Executes one or more simulation steps.
+   * @param kernels Record of WGSL sources for the engine's rules.
+   * @param count Number of steps to run.
+   */
+  async step(t, i = 1) {
+    for (let f = 0; f < i; f++)
+      await this.dispatcher.dispatch(f, t), this.parityManager.increment();
+  }
+  setFaceData(t, i, f, c = !1, d) {
+    this.buffer.setFaceData(t, i, f, c, d);
+  }
+  getFaceData(t, i, f) {
+    return this.buffer.getFaceData(t, i, f);
+  }
+  async syncFacesToHost(t) {
+    await this.buffer.syncFacesToHost(t);
+  }
+  /**
+   * Executes a global reduction (Sum) on a specific face.
+   */
+  async reduceField(t, i) {
+    return (await this.dispatcher.reduce("Reduction", i, t, 1))[0];
+  }
+  /**
+   * Measures aerodynamic forces using the Momentum Exchange Method (MEM).
+   * @returns [Fx, Fy] in lattice units.
+   */
+  async reduceForces(t) {
+    const i = await this.dispatcher.reduce("Forces", t, void 0, 2);
+    return [i[0], i[1]];
+  }
+  syncToDevice() {
+    this.buffer.syncToDevice();
+  }
+}
+class N {
+  constructor(t) {
+    this.descriptor = t;
+  }
+  getFaceMappings() {
+    return this.descriptor.faces.map((t, i) => {
+      const f = t.isPingPong !== void 0 ? t.isPingPong : t.isSynchronized && this.descriptor.requirements.pingPong && !t.isReadOnly, c = t.type === "scalar" ? 1 : t.type === "vector" ? 3 : t.type === "population" ? 9 : t.type === "population3D" ? 19 : 1;
+      return {
+        faceIndex: i,
+        name: t.name,
+        type: t.type,
+        requiresSync: t.isSynchronized,
+        isPingPong: !!f,
+        numComponents: c
+      };
+    });
+  }
+  calculateChunkBytes(t, i, f, c) {
+    const p = t + c * 2, e = i + c * 2, n = f > 1 ? f + c * 2 : 1, o = p * e * n, y = this.getFaceMappings();
+    let u = 0;
+    for (const g of y)
+      u += g.numComponents * (g.isPingPong ? 2 : 1);
+    return o * 4 * u;
+  }
+}
+class D {
+  buildMap(t, i, f) {
+    const c = [], d = i.z || 1, p = (e, n, o) => {
+      const y = Math.floor(e / n), u = e % n;
+      return o < u ? y + 1 : y;
+    };
+    for (let e = 0; e < d; e++) {
+      const n = p(t.nz || 1, d, e);
+      for (let o = 0; o < i.y; o++) {
+        const y = p(t.ny, i.y, o);
+        for (let u = 0; u < i.x; u++) {
+          const g = p(t.nx, i.x, u), h = `chunk_${u}_${o}_${e}`, s = [];
+          [
+            "left",
+            "right",
+            "top",
+            "bottom",
+            "front",
+            "back",
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right",
+            "front-left",
+            "front-right",
+            "front-top",
+            "front-bottom",
+            "back-left",
+            "back-right",
+            "back-top",
+            "back-bottom",
+            "front-top-left",
+            "front-top-right",
+            "front-bottom-left",
+            "front-bottom-right",
+            "back-top-left",
+            "back-top-right",
+            "back-bottom-left",
+            "back-bottom-right"
+          ].forEach((k) => {
+            const w = this.deduceJoint(u, o, e, k, i, f);
+            w && s.push(w);
+          }), c.push({
+            x: u,
+            y: o,
+            z: e,
+            id: h,
+            joints: s,
+            localDimensions: { nx: g, ny: y, nz: n }
+          });
+        }
+      }
+    }
+    return c;
+  }
+  deduceJoint(t, i, f, c, d, p) {
+    var U, S, O, z, A, T, C, x, r;
+    let e = 0, n = 0, o = 0;
+    switch (c) {
+      case "left":
+        e = -1;
+        break;
+      case "right":
+        e = 1;
+        break;
+      case "top":
+        n = -1;
+        break;
+      case "bottom":
+        n = 1;
+        break;
+      case "front":
+        o = -1;
+        break;
+      case "back":
+        o = 1;
+        break;
+      case "top-left":
+        e = -1, n = -1;
+        break;
+      case "top-right":
+        e = 1, n = -1;
+        break;
+      case "bottom-left":
+        e = -1, n = 1;
+        break;
+      case "bottom-right":
+        e = 1, n = 1;
+        break;
+      case "front-left":
+        e = -1, o = -1;
+        break;
+      case "front-right":
+        e = 1, o = -1;
+        break;
+      case "front-top":
+        n = -1, o = -1;
+        break;
+      case "front-bottom":
+        n = 1, o = -1;
+        break;
+      case "back-left":
+        e = -1, o = 1;
+        break;
+      case "back-right":
+        e = 1, o = 1;
+        break;
+      case "back-top":
+        n = -1, o = 1;
+        break;
+      case "back-bottom":
+        n = 1, o = 1;
+        break;
+      case "front-top-left":
+        e = -1, n = -1, o = -1;
+        break;
+      case "front-top-right":
+        e = 1, n = -1, o = -1;
+        break;
+      case "front-bottom-left":
+        e = -1, n = 1, o = -1;
+        break;
+      case "front-bottom-right":
+        e = 1, n = 1, o = -1;
+        break;
+      case "back-top-left":
+        e = -1, n = -1, o = 1;
+        break;
+      case "back-top-right":
+        e = 1, n = -1, o = 1;
+        break;
+      case "back-bottom-left":
+        e = -1, n = 1, o = 1;
+        break;
+      case "back-bottom-right":
+        e = 1, n = 1, o = 1;
+        break;
+    }
+    let y = t + e, u = i + n, g = f + o;
+    const h = d.z || 1, s = (a, b) => (a + b) % b, l = y < 0 || y >= d.x, k = u < 0 || u >= d.y, w = g < 0 || g >= h;
+    if (!l && !k && !w)
+      return { role: "joint", face: c, neighborId: `chunk_${y}_${u}_${g}` };
+    const m = p || {}, M = (a) => {
+      var b;
+      return a === "periodic" || ((b = m.all) == null ? void 0 : b.role) === "periodic";
+    }, v = e === -1 && M((U = m.left) == null ? void 0 : U.role) || e === 1 && M((S = m.right) == null ? void 0 : S.role), G = n === -1 && M((O = m.top) == null ? void 0 : O.role) || n === 1 && M((z = m.bottom) == null ? void 0 : z.role), _ = o === -1 && M((A = m.front) == null ? void 0 : A.role) || o === 1 && M((T = m.back) == null ? void 0 : T.role);
+    return l && !v || k && !G || w && !_ ? e !== 0 && n === 0 && o === 0 && l ? { role: ((C = e === -1 ? m.left : m.right) == null ? void 0 : C.role) || "wall", face: c } : n !== 0 && e === 0 && o === 0 && k ? { role: ((x = n === -1 ? m.top : m.bottom) == null ? void 0 : x.role) || "wall", face: c } : o !== 0 && e === 0 && n === 0 && w ? { role: ((r = o === -1 ? m.front : m.back) == null ? void 0 : r.role) || "wall", face: c } : void 0 : {
+      role: "joint",
+      face: c,
+      neighborId: `chunk_${l ? s(y, d.x) : y}_${k ? s(u, d.y) : u}_${w ? s(g, h) : g}`
+    };
+  }
+}
+class Y {
+  constructor(t, i, f = new D()) {
+    B(this, "chunks");
+    B(this, "dataContract");
+    this.config = t, this.dataContract = new N(i);
+    const c = t.chunks || { x: 1, y: 1, z: 1 };
+    this.chunks = f.buildMap(
+      t.dimensions,
+      c,
+      t.boundaries
+    );
+  }
+  get dimensions() {
+    return this.config.dimensions;
+  }
+  get chunkLayout() {
+    const t = this.config.chunks || { x: 1, y: 1, z: 1 };
+    return {
+      x: t.x,
+      y: t.y,
+      z: t.z || 1
+    };
+  }
+  findChunkAt(t, i, f = 0) {
+    let c = t, d = i, p = f;
+    return this.chunks.find((e) => e.x === c && e.y === d && e.z === p);
+  }
+  getObjectsInChunk(t, i = 0) {
+    if (!this.config.objects) return [];
+    let f = 0, c = 0;
+    for (const e of this.chunks)
+      e.y === t.y && e.z === t.z && e.x < t.x && (f += e.localDimensions.nx), e.x === t.x && e.z === t.z && e.y < t.y && (c += e.localDimensions.ny);
+    const d = f + t.localDimensions.nx, p = c + t.localDimensions.ny;
+    return this.config.objects.filter((e) => {
+      var l, k;
+      let n = e.position.x, o = e.position.y;
+      (l = e.animation) != null && l.velocity && (n += e.animation.velocity.x * i, o += e.animation.velocity.y * i);
+      const y = ((k = e.influence) == null ? void 0 : k.radius) || 0, u = n - y, g = n + e.dimensions.w + y, h = o - y, s = o + e.dimensions.h + y;
+      return !(g < f || u > d || s < c || h > p);
+    });
+  }
+}
+function R() {
+  if (typeof globalThis < "u") {
+    const P = globalThis;
+    P.GPUBufferUsage || (P.GPUBufferUsage = {
+      MAP_READ: 1,
+      MAP_WRITE: 2,
+      COPY_SRC: 4,
+      COPY_DST: 8,
+      INDEX: 16,
+      VERTEX: 32,
+      UNIFORM: 64,
+      STORAGE: 128,
+      INDIRECT: 256,
+      QUERY_RESOLVE: 512
+    }), P.GPUMapMode || (P.GPUMapMode = { READ: 1, WRITE: 2 }), P.GPUShaderStage || (P.GPUShaderStage = { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 });
+  }
+}
+R();
+class E {
+  static get _state() {
+    const t = globalThis;
+    return t[this.STATE_KEY] || (t[this.STATE_KEY] = { device: null, adapter: null, isMock: !1 }), t[this.STATE_KEY];
+  }
+  static get isMock() {
+    return this._state.isMock;
+  }
+  static get device() {
+    const t = this._state.device;
+    if (!t) {
+      if (typeof process < "u" && process.env.NODE_ENV === "test")
+        return this.initAutoMock(), this._state.device;
+      throw new Error("[HypercubeGPUContext] WebGPU device not initialized. Call HypercubeGPUContext.init() first.");
+    }
+    return t;
+  }
+  static initAutoMock() {
+    R();
+    const t = {
+      createShaderModule: () => ({ label: "mock-shader" }),
+      createComputePipeline: () => ({ getBindGroupLayout: () => ({}), label: "mock-pipeline" }),
+      createComputePipelineAsync: async () => ({ getBindGroupLayout: () => ({}), label: "mock-pipeline" }),
+      createBuffer: (i) => ({
+        destroy: () => {
+        },
+        size: i.size,
+        getMappedRange: () => new ArrayBuffer(i.size),
+        unmap: () => {
+        },
+        mapAsync: () => Promise.resolve()
+      }),
+      createBindGroup: () => ({ label: "mock-bind-group" }),
+      queue: {
+        writeBuffer: () => {
+        },
+        submit: () => {
+        },
+        onSubmittedWorkDone: () => Promise.resolve()
+      },
+      limits: { minUniformBufferOffsetAlignment: 256 },
+      createCommandEncoder: () => ({
+        beginComputePass: () => ({
+          setPipeline: () => {
+          },
+          setBindGroup: () => {
+          },
+          setWorkgroupCount: () => {
+          },
+          dispatchWorkgroups: () => {
+          },
+          end: () => {
+          }
+        }),
+        copyBufferToBuffer: () => {
+        },
+        finish: () => ({ label: "mock-command-buffer" })
+      })
+    };
+    this._state.device = t, this._state.isMock = !0, globalThis.__HYPERCUBE_IS_MOCK__ = !0;
+  }
+  static setDevice(t) {
+    this._state.device = t, t && !t.pushErrorScope && (this._state.isMock = !0, globalThis.__HYPERCUBE_IS_MOCK__ = !0);
+  }
+  static get isInitialized() {
+    return typeof process < "u" && process.env.NODE_ENV === "test" ? !0 : this._state.device !== null;
+  }
+  static async init(t) {
+    if (t)
+      return this.setDevice(t), !0;
+    if (this._state.device) return !0;
+    if (typeof navigator > "u" || !navigator.gpu)
+      return typeof process < "u" && process.env.NODE_ENV === "test" ? (this.initAutoMock(), !0) : (console.error("[HypercubeGPUContext] WebGPU not supported."), !1);
+    const i = await navigator.gpu.requestAdapter();
+    return i ? (this._state.adapter = i, this._state.device = await i.requestDevice({
+      label: "Hypercube GPU Core Device",
+      requiredLimits: { maxStorageBufferBindingSize: 1073741824 }
+    }), this._state.isMock = !1, globalThis.__HYPERCUBE_IS_MOCK__ = !1, console.info("[HypercubeGPUContext] WebGPU Device initialized."), !0) : (console.error("[HypercubeGPUContext] Failed to get GPUAdapter."), !1);
+  }
+  static get uniformAlignment() {
+    return this.device.limits.minUniformBufferOffsetAlignment || 256;
+  }
+  static alignToUniform(t) {
+    const i = this.uniformAlignment;
+    return Math.ceil(t / i) * i;
+  }
+  static createComputePipeline(t, i = "Compute Pipeline") {
+    const f = this.device.createShaderModule({ code: t });
+    return this.device.createComputePipeline({
+      label: i,
+      layout: "auto",
+      compute: { module: f, entryPoint: "main" }
+    });
+  }
+  static async createComputePipelineAsync(t, i = "Compute Pipeline") {
+    const f = this.device.createShaderModule({ code: t });
+    return await this.device.createComputePipelineAsync({
+      label: i,
+      layout: "auto",
+      compute: { module: f, entryPoint: "main" }
+    });
+  }
+  static createStorageBuffer(t, i) {
+    return this.device.createBuffer({
+      size: Math.ceil(t / 4) * 4,
+      usage: i !== void 0 ? i : 140,
+      label: "Hypercube Storage Buffer"
+    });
+  }
+  static destroy() {
+    var t;
+    (t = this._state.device) == null || t.destroy(), this._state.device = null, this._state.adapter = null, this._state.isMock = !1, globalThis.__HYPERCUBE_IS_MOCK__ = !1;
+  }
+}
+B(E, "STATE_KEY", Symbol.for("HYPERCUBE_GPU_CONTEXT_STATE"));
+class q {
+  constructor(t) {
+    B(this, "byteLength");
+    B(this, "strideFace");
+    // in float32 (4-byte) units
+    B(this, "strideRow");
+    // in float32 units
+    B(this, "totalSlotsPerChunk");
+    B(this, "faceMappings");
+    B(this, "cellsPerFaceRaw");
+    this.vGrid = t;
+    const i = this.vGrid.dataContract;
+    this.faceMappings = i.getFaceMappings();
+    let f = 0, c = 0, d = 0;
+    for (const g of this.vGrid.chunks)
+      f = Math.max(f, g.localDimensions.nx), c = Math.max(c, g.localDimensions.ny), d = Math.max(d, g.localDimensions.nz);
+    const p = i.descriptor.requirements.ghostCells, e = f + 2 * p, n = c + 2 * p, o = d > 1 ? d + 2 * p : 1;
+    this.strideRow = e, this.cellsPerFaceRaw = e * n * o;
+    const y = this.cellsPerFaceRaw * 4, u = Math.ceil(y / 256) * 256;
+    this.strideFace = u / 4, this.totalSlotsPerChunk = this.faceMappings.reduce((g, h) => g + h.numComponents * (h.isPingPong ? 2 : 1), 0), this.byteLength = this.vGrid.chunks.length * this.totalSlotsPerChunk * u;
+  }
+  /**
+   /**
+   * Calculates the float32 offset for a specific chunk and face.
+   */
+  getFaceOffset(t, i, f = !1) {
+    let c = t * this.totalSlotsPerChunk;
+    for (let d = 0; d < i; d++)
+      c += this.faceMappings[d].numComponents * (this.faceMappings[d].isPingPong ? 2 : 1);
+    return f && (c += this.faceMappings[i].numComponents), c * this.strideFace;
+  }
+}
+class X {
+  constructor(t, i) {
+    B(this, "rawBuffer");
+    B(this, "gpuBuffer");
+    B(this, "layout");
+    B(this, "chunkViews", /* @__PURE__ */ new Map());
+    B(this, "device");
+    B(this, "vGrid");
+    if (this.vGrid = t, this.layout = new q(this.vGrid), i)
+      this.device = i;
+    else {
+      if (!E.isInitialized)
+        throw new Error("MasterBuffer: GPU Context not initialized.");
+      this.device = E.device;
+    }
+    this.gpuBuffer = this.device.createBuffer({
+      size: Math.ceil(this.layout.byteLength / 4) * 4,
+      usage: 140,
+      // STORAGE | COPY_DST | COPY_SRC
+      label: "Hypercube Storage Buffer"
+    }), this.rawBuffer = new ArrayBuffer(this.layout.byteLength), this.partitionMemory();
+  }
+  // Compatibility getters
+  get byteLength() {
+    return this.layout.byteLength;
+  }
+  get strideFace() {
+    return this.layout.strideFace;
+  }
+  get totalSlotsPerChunk() {
+    return this.layout.totalSlotsPerChunk;
+  }
+  partitionMemory() {
+    const t = this.vGrid;
+    for (let i = 0; i < t.chunks.length; i++) {
+      const f = t.chunks[i], c = [];
+      for (let d = 0; d < this.layout.faceMappings.length; d++) {
+        const p = this.layout.faceMappings[d], e = p.isPingPong ? 2 : 1;
+        for (let n = 0; n < e; n++) {
+          const o = this.layout.getFaceOffset(i, d, n === 1), y = p.numComponents * this.strideFace, u = new Float32Array(this.rawBuffer, o * 4, y);
+          c.push(u);
+        }
+      }
+      this.chunkViews.set(f.id, {
+        id: f.id,
+        faces: c
+      });
+    }
+  }
+  async syncToHost() {
+    const t = this.byteLength, i = E.device.createBuffer({
+      size: t,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+      label: "Readback Staging"
+    }), f = E.device.createCommandEncoder();
+    f.copyBufferToBuffer(this.gpuBuffer, 0, i, 0, t), E.device.queue.submit([f.finish()]), await i.mapAsync(GPUMapMode.READ);
+    const c = new Float32Array(i.getMappedRange());
+    new Float32Array(this.rawBuffer).set(c), i.unmap(), i.destroy();
+  }
+  async syncFacesToHost(t) {
+    const i = this.vGrid.dataContract, f = t.map((n) => {
+      if (typeof n == "string") {
+        const o = i.descriptor.faces.findIndex((y) => y.name === n);
+        if (o === -1) throw new Error(`Face ${n} not found.`);
+        return o;
+      }
+      return n;
+    }), c = [], d = [];
+    f.forEach((n, o) => {
+      const y = t[o], u = i.descriptor.faces.find((s) => s.name === y), g = (u == null ? void 0 : u.type) === "scalar" ? 1 : (u == null ? void 0 : u.type) === "vector" ? 3 : (u == null ? void 0 : u.type) === "population" ? 9 : 1, h = u != null && u.isPingPong ? 2 : 1;
+      for (let s = 0; s < h; s++) {
+        const l = g * this.strideFace * 4;
+        c.push(l);
+        const k = this.layout.getFaceOffset(0, n, s === 1);
+        d.push(k * 4);
+      }
+    });
+    const p = d.map((n, o) => E.device.createBuffer({
+      size: c[o],
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+    })), e = E.device.createCommandEncoder();
+    d.forEach((n, o) => {
+      e.copyBufferToBuffer(this.gpuBuffer, n, p[o], 0, c[o]);
+    }), E.device.queue.submit([e.finish()]), await Promise.all(p.map((n) => n.mapAsync(GPUMapMode.READ))), d.forEach((n, o) => {
+      const y = new Float32Array(p[o].getMappedRange());
+      (y[0] !== 0 || y[10] !== 0) && console.log(`[DEBUG_SYNC] Buffer ${o} (Offset ${n}) contains non-zero data! First sample: ${y[0]}`), new Float32Array(this.rawBuffer, n, c[o] / 4).set(y), p[o].unmap(), p[o].destroy();
+    });
+  }
+  syncToDevice() {
+    E.device.queue.writeBuffer(this.gpuBuffer, 0, new Uint8Array(this.rawBuffer));
+  }
+  getChunkViews(t) {
+    const i = this.chunkViews.get(t);
+    if (!i) throw new Error(`Chunk ${t} not partitioned.`);
+    return i;
+  }
+  setFaceData(t, i, f, c = !1, d) {
+    const p = this.getChunkViews(t), n = this.vGrid.dataContract.descriptor.faces.findIndex((u) => u.name === i);
+    if (n === -1) return;
+    let o = 0;
+    for (let u = 0; u < n; u++)
+      o += this.layout.faceMappings[u].isPingPong ? 2 : 1;
+    const y = d !== void 0 && this.layout.faceMappings[n].isPingPong ? o + d : o;
+    p.faces[y].set(f), c && this.layout.faceMappings[n].isPingPong && p.faces[o + 1].set(f);
+  }
+  getFaceData(t, i, f) {
+    const c = this.getChunkViews(t), p = this.vGrid.dataContract.descriptor.faces.findIndex((o) => o.name === i);
+    if (p === -1) throw new Error(`Face ${i} not found.`);
+    let e = 0;
+    for (let o = 0; o < p; o++)
+      e += this.layout.faceMappings[o].isPingPong ? 2 : 1;
+    const n = f !== void 0 && this.layout.faceMappings[p].isPingPong ? e + f : e;
+    return c.faces[n];
+  }
+}
+var $ = /* @__PURE__ */ ((P) => (P[P.JOINT = 0] = "JOINT", P[P.CONTINUITY = 1] = "CONTINUITY", P[P.WALL = 2] = "WALL", P[P.INFLOW = 3] = "INFLOW", P[P.OUTFLOW = 4] = "OUTFLOW", P[P.SYMMETRY = 5] = "SYMMETRY", P[P.ABSORBING = 6] = "ABSORBING", P[P.CLAMPED = 7] = "CLAMPED", P[P.DIRICHLET = 8] = "DIRICHLET", P[P.NEUMANN = 9] = "NEUMANN", P[P.MOVING_WALL = 10] = "MOVING_WALL", P))($ || {});
+class W {
+  resolve(t, i, f) {
+    const c = {
+      leftRole: 0,
+      rightRole: 0,
+      topRole: 0,
+      bottomRole: 0,
+      frontRole: 0,
+      backRole: 0
+    }, d = ["left", "right", "top", "bottom", "front", "back"];
+    for (const p of d) {
+      const e = t.joints.find((o) => o.face === p);
+      let n = 0;
+      if (e)
+        n = e.role === "joint" ? 1 : this.mapRoleToID(e.role);
+      else {
+        const y = f[p] || f.all || { role: "wall" };
+        n = this.mapRoleToID(y.role);
+      }
+      switch (p) {
+        case "left":
+          c.leftRole = n;
+          break;
+        case "right":
+          c.rightRole = n;
+          break;
+        case "top":
+          c.topRole = n;
+          break;
+        case "bottom":
+          c.bottomRole = n;
+          break;
+        case "front":
+          c.frontRole = n;
+          break;
+        case "back":
+          c.backRole = n;
+          break;
+      }
+    }
+    return c;
+  }
+  mapRoleToID(t) {
+    switch (t) {
+      case "wall":
+        return 2;
+      case "inflow":
+        return 3;
+      case "outflow":
+        return 4;
+      case "periodic":
+        return 1;
+      case "joint":
+        return 1;
+      case "symmetry":
+        return 5;
+      case "absorbing":
+        return 6;
+      case "dirichlet":
+        return 8;
+      case "neumann":
+        return 9;
+      case "clamped":
+        return 7;
+      case "moving_wall":
+        return 10;
+      default:
+        return 2;
+    }
+  }
+}
+class H {
+  constructor(t, i, f, c) {
+    B(this, "device");
+    B(this, "pipelines", /* @__PURE__ */ new Map());
+    B(this, "uniformBuffer");
+    B(this, "reductionBuffer");
+    B(this, "forceResultsBuffer");
+    B(this, "forceResultsStaging");
+    B(this, "haloTransferBuffer");
+    B(this, "topologyResolver", new W());
+    B(this, "bindGroupCache", /* @__PURE__ */ new Map());
+    B(this, "dispatchMetadata", []);
+    B(this, "bytesPerChunkAligned", 0);
+    B(this, "MAX_RULES", 8);
+    B(this, "stagingBuffer");
+    if (this.vGrid = t, this.buffer = i, this.parityManager = f, c)
+      this.device = c;
+    else {
+      if (!E.isInitialized)
+        throw new Error("GpuDispatcher: GPU Context not initialized.");
+      this.device = E.device;
+    }
+    this.bytesPerChunkAligned = E.alignToUniform(512), this.refreshMetadata(), typeof window < "u" && (window.dispatcher = this);
+  }
+  refreshMetadata() {
+    const t = this.buffer.strideFace, i = this.buffer.totalSlotsPerChunk;
+    this.dispatchMetadata = this.vGrid.chunks.map((c, d) => {
+      const p = c.y * this.vGrid.chunkLayout.x + c.x;
+      return {
+        vChunk: c,
+        uniformOffset: d * this.MAX_RULES * this.bytesPerChunkAligned,
+        dataOffset: p * i * t * 4,
+        dataSize: i * t * 4,
+        globalIdx: p,
+        topology: this.topologyResolver.resolve(c, this.vGrid.chunkLayout, this.vGrid.config.boundaries)
+      };
+    });
+    const f = this.vGrid.chunks.length * this.MAX_RULES * this.bytesPerChunkAligned;
+    this.stagingBuffer = new Uint32Array(f / 4);
+    for (let c = 0; c < this.dispatchMetadata.length; c++) {
+      const d = this.dispatchMetadata[c], p = this.vGrid.dataContract.descriptor.requirements.ghostCells || 0, e = d.topology;
+      for (let n = 0; n < this.MAX_RULES; n++) {
+        const o = (c * this.MAX_RULES + n) * (this.bytesPerChunkAligned / 4);
+        this.stagingBuffer[o + 0] = d.vChunk.localDimensions.nx, this.stagingBuffer[o + 1] = d.vChunk.localDimensions.ny, this.stagingBuffer[o + 2] = d.vChunk.localDimensions.nx + p * 2, this.stagingBuffer[o + 3] = d.vChunk.localDimensions.ny + p * 2, this.stagingBuffer[o + 32] = e.leftRole, this.stagingBuffer[o + 33] = e.rightRole, this.stagingBuffer[o + 34] = e.topRole, this.stagingBuffer[o + 35] = e.bottomRole, this.stagingBuffer[o + 36] = e.frontRole, this.stagingBuffer[o + 37] = e.backRole;
+      }
+    }
+  }
+  async prepareKernels(t) {
+    const i = Object.entries(t).map(
+      ([f, c]) => this.getPipeline(f, c)
+    );
+    await Promise.all(i);
+  }
+  ensureBuffers() {
+    const t = this.vGrid.chunks.length * this.MAX_RULES * this.bytesPerChunkAligned;
+    (!this.uniformBuffer || this.uniformBuffer.size < t) && (this.uniformBuffer && this.uniformBuffer.destroy(), this.uniformBuffer = this.device.createBuffer({
+      size: t,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      label: "GpuDispatcher Uniforms (Multi-Rule)"
+    }), this.bindGroupCache.clear()), this.stagingBuffer || this.refreshMetadata();
+  }
+  async dispatch(t = 0, i, f, c) {
+    var s;
+    this.reductionBuffer = c == null ? void 0 : c.reductionBuffer;
+    const d = this.vGrid.dataContract.descriptor, p = this.buffer.strideFace;
+    this.ensureBuffers();
+    const e = this.stagingBuffer, n = new Float32Array(e.buffer), o = f || this.device.createCommandEncoder(), y = d.rules || [], u = this.vGrid.dataContract.getFaceMappings(), g = y.map((l) => {
+      const k = i[l.type];
+      return k ? this.getPipeline(l.type, k) : Promise.resolve(null);
+    }), h = await Promise.all(g);
+    for (let l = 0; l < y.length; l++) {
+      const k = y[l];
+      if (h[l])
+        for (let w = 0; w < this.dispatchMetadata.length; w++) {
+          const m = (w * this.MAX_RULES + l) * (this.bytesPerChunkAligned / 4), M = this.dispatchMetadata[w].vChunk.localDimensions, v = d.requirements.ghostCells || 0, G = ((s = this.buffer.layout) == null ? void 0 : s.strideRow) || M.nx + 2;
+          e[m + 0] = M.nx, e[m + 1] = M.ny, e[m + 2] = G, e[m + 3] = M.ny + v * 2, n[m + 4] = t, e[m + 5] = this.parityManager.currentTick, e[m + 6] = p, e[m + 7] = u.length;
+          const _ = this.vGrid.config.params || {}, U = 1e9;
+          for (let O = 0; O < 8; O++) {
+            const z = `p${O}`;
+            let A = k.params && k.params[z] !== void 0 ? k.params[z] : _[z];
+            n[m + 8 + O] = typeof A == "number" ? A : O === 7 ? U : 0;
+          }
+          const S = k.faces || [];
+          for (let O = 0; O < 16; O++) {
+            let z = "";
+            if (O < S.length ? z = S[O] : O < u.length && S.length === 0 && (z = u[O].name), z) {
+              const A = z.replace(".read", "").replace(".write", ""), T = this.parityManager.getFaceIndices(A);
+              z.endsWith(".read") ? e[m + 16 + O] = T.read : z.endsWith(".write") ? e[m + 16 + O] = T.write : e[m + 16 + O] = T.base;
+            } else
+              e[m + 16 + O] = 999;
+          }
+        }
+    }
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, e.buffer);
+    for (let l = 0; l < y.length; l++) {
+      const k = h[l];
+      if (!k) continue;
+      const w = o.beginComputePass();
+      w.setPipeline(k);
+      for (let m = 0; m < this.dispatchMetadata.length; m++) {
+        const M = this.dispatchMetadata[m], v = l * this.bytesPerChunkAligned, G = this.getCachedBindGroup(
+          k,
+          this.buffer.gpuBuffer,
+          this.uniformBuffer,
+          M.globalIdx,
+          M.uniformOffset + v,
+          M.dataOffset,
+          M.dataSize,
+          this.reductionBuffer
+        );
+        w.setBindGroup(0, G);
+        const _ = M.vChunk.localDimensions;
+        _.nz && _.nz > 1 ? w.dispatchWorkgroups(Math.ceil(_.nx / 8), Math.ceil(_.ny / 8), Math.ceil(_.nz / 4)) : w.dispatchWorkgroups(Math.ceil(_.nx / 16), Math.ceil(_.ny / 16), 1);
+      }
+      w.end();
+    }
+    return this.vGrid.chunks.length > 1 && await this.syncHalos(i, o), f || this.device.queue.submit([o.finish()]), o;
+  }
+  getCachedBindGroup(t, i, f, c, d, p, e, n) {
+    this.device !== E.device && (this.device = E.device, this.bindGroupCache.clear(), this.pipelines.clear());
+    const y = `bg_${t.label || "Default"}_${c}_${d}_${p}_${n ? "R" : "N"}`;
+    let u = this.bindGroupCache.get(y);
+    if (u) return u;
+    const g = [
+      { binding: 0, resource: { buffer: i, offset: p, size: e } },
+      { binding: 1, resource: { buffer: f, offset: d, size: this.bytesPerChunkAligned } }
+    ];
+    return n && g.push({ binding: 2, resource: { buffer: n } }), u = this.device.createBindGroup({
+      layout: t.getBindGroupLayout(0),
+      entries: g
+    }), this.bindGroupCache.set(y, u), u;
+  }
+  async getPipeline(t, i) {
+    this.device !== E.device && (this.device = E.device, this.bindGroupCache.clear(), this.pipelines.clear());
+    const f = `${t}_${i.length}_${i.substring(0, 16)}`;
+    let c = this.pipelines.get(f);
+    return c || (c = await E.createComputePipelineAsync(i, `Kernel_${t}`), this.pipelines.set(f, c), c);
+  }
+  async reduce(t, i, f, c = 1) {
+    var g;
+    this.forceResultsBuffer || (this.forceResultsBuffer = this.device.createBuffer({
+      size: 16,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    }), this.forceResultsStaging = this.device.createBuffer({
+      size: 16,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+    })), this.device.queue.writeBuffer(this.forceResultsBuffer, 0, new Int32Array(4).fill(0));
+    const d = await this.getPipeline(t, i), p = this.device.createCommandEncoder();
+    this.ensureBuffers();
+    const e = this.vGrid.dataContract.getFaceMappings(), n = new Float32Array(this.stagingBuffer.buffer);
+    for (let h = 0; h < this.dispatchMetadata.length; h++) {
+      const s = h * this.MAX_RULES * (this.bytesPerChunkAligned / 4), l = this.dispatchMetadata[h].vChunk.localDimensions, k = ((g = this.buffer.layout) == null ? void 0 : g.strideRow) || l.nx + 2;
+      this.stagingBuffer[s + 0] = l.nx, this.stagingBuffer[s + 1] = l.ny;
+      const w = this.vGrid.dataContract.descriptor.requirements.ghostCells || 1;
+      this.stagingBuffer[s + 2] = k, this.stagingBuffer[s + 3] = l.ny + w * 2, this.stagingBuffer[s + 5] = this.parityManager.currentTick, this.stagingBuffer[s + 6] = this.buffer.strideFace, this.stagingBuffer[s + 7] = e.length, e.findIndex((M) => M.name === "obstacle");
+      const m = this.vGrid.config.params || {};
+      for (let M = 0; M < 7; M++) {
+        const v = `p${M}`;
+        m[v] !== void 0 && (n[s + 8 + M] = m[v]);
+      }
+      n[s + 15] = f ? 1e4 : 1e9;
+      for (let M = 0; M < 16; M++)
+        if (M < e.length) {
+          const v = e[M], G = this.parityManager.getFaceIndices(v.name);
+          this.stagingBuffer[s + 16 + M] = v.isPingPong ? G.read : G.base;
+        } else
+          this.stagingBuffer[s + 16 + M] = 999;
+    }
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, this.stagingBuffer.buffer);
+    const o = p.beginComputePass();
+    o.setPipeline(d);
+    for (let h = 0; h < this.dispatchMetadata.length; h++) {
+      const s = this.dispatchMetadata[h], l = this.getCachedBindGroup(d, this.buffer.gpuBuffer, this.uniformBuffer, s.globalIdx, s.uniformOffset, s.dataOffset, s.dataSize, this.forceResultsBuffer);
+      o.setBindGroup(0, l);
+      const k = s.vChunk.localDimensions;
+      o.dispatchWorkgroups(Math.ceil(k.nx / 16), Math.ceil(k.ny / 16), k.nz || 1);
+    }
+    o.end(), p.copyBufferToBuffer(this.forceResultsBuffer, 0, this.forceResultsStaging, 0, 16), this.device.queue.submit([p.finish()]), await this.forceResultsStaging.mapAsync(GPUMapMode.READ);
+    const y = new Int32Array(this.forceResultsStaging.getMappedRange()), u = [];
+    for (let h = 0; h < c; h++) u.push(y[h] / 1e9);
+    return this.forceResultsStaging.unmap(), u;
+  }
+  async syncHalos(t, i) {
+    const f = t.HaloExchange;
+    if (!f) return;
+    const c = await this.getPipeline("HaloExchange", f), d = [], p = this.buffer.strideFace, e = this.vGrid.dataContract.getFaceMappings().length;
+    for (const g of this.dispatchMetadata)
+      for (const h of g.vChunk.joints) {
+        if (h.role !== "joint") continue;
+        const s = this.vGrid.chunks.find((S) => S.id === h.neighborId);
+        if (!s) continue;
+        const l = this.dispatchMetadata.find((S) => S.vChunk.id === s.id);
+        if (!l) continue;
+        const k = g.vChunk.localDimensions, w = k.nx + 2, m = k.ny + 2, M = (k.nz || 1) + 2;
+        let v = 0, G = 0, _ = 0, U = 0;
+        switch (h.face) {
+          case "left":
+            v = 0, G = k.nx + 1;
+            break;
+          case "right":
+            v = 0, k.nx, G = 0;
+            break;
+          case "bottom":
+            v = 1, G = k.ny + 1;
+            break;
+          case "top":
+            v = 1, k.ny, G = 0;
+            break;
+          case "back":
+            v = 2, G = (k.nz || 1) + 1;
+            break;
+          case "front":
+            v = 2, k.nz, G = 0;
+            break;
+          default:
+            continue;
+        }
+        v === 0 ? (_ = m, U = M) : v === 1 ? (_ = w, U = M) : (_ = w, U = m), d.push({
+          srcBase: l.dataOffset / 4,
+          dstBase: g.dataOffset / 4,
+          stride: p,
+          lx: w,
+          ly: m,
+          lz: M,
+          numFaces: e,
+          axis: v,
+          srcPos: h.face === "left" || h.face === "bottom" || h.face === "back" ? v === 0 ? s.localDimensions.nx : v === 1 ? s.localDimensions.ny : s.localDimensions.nz : 1,
+          dstPos: G,
+          size1: _,
+          size2: U
+        });
+      }
+    if (d.length === 0) return;
+    const n = 12 * 4;
+    (!this.haloTransferBuffer || this.haloTransferBuffer.size < d.length * n) && (this.haloTransferBuffer && this.haloTransferBuffer.destroy(), this.haloTransferBuffer = this.device.createBuffer({
+      size: d.length * n,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    }), this.bindGroupCache.clear());
+    const o = new Uint32Array(d.length * 12);
+    for (let g = 0; g < d.length; g++) {
+      const h = d[g], s = g * 12;
+      o[s + 0] = h.srcBase, o[s + 1] = h.dstBase, o[s + 2] = h.stride, o[s + 3] = h.lx, o[s + 4] = h.ly, o[s + 5] = h.lz, o[s + 6] = h.numFaces, o[s + 7] = h.axis, o[s + 8] = h.srcPos, o[s + 9] = h.dstPos, o[s + 10] = h.size1, o[s + 11] = h.size2;
+    }
+    this.device.queue.writeBuffer(this.haloTransferBuffer, 0, o);
+    const y = i.beginComputePass();
+    y.setPipeline(c);
+    const u = this.device.createBindGroup({
+      layout: c.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.buffer.gpuBuffer } },
+        { binding: 1, resource: { buffer: this.haloTransferBuffer } }
+      ]
+    });
+    y.setBindGroup(0, u), y.dispatchWorkgroups(16, 16, d.length), y.end();
+  }
+}
+class V {
+  constructor(t) {
+    B(this, "currentTick", 0);
+    B(this, "faceIndexCache", /* @__PURE__ */ new Map());
+    this.dataContract = t, this.updateCache();
+  }
+  increment() {
+    this.currentTick++, this.updateCache();
+  }
+  getFaceIndices(t) {
+    const i = this.faceIndexCache.get(t);
+    if (!i)
+      throw new Error(`ParityManager: Face '${t}' not found.`);
+    return i;
+  }
+  updateCache() {
+    const t = this.dataContract.getFaceMappings();
+    let i = 0;
+    for (const f of t)
+      if (f.isPingPong) {
+        const c = this.currentTick % 2;
+        this.faceIndexCache.set(f.name, {
+          base: i,
+          read: i + c * f.numComponents,
+          write: i + (1 - c) * f.numComponents
+        }), i += 2 * f.numComponents;
+      } else
+        this.faceIndexCache.set(f.name, {
+          base: i,
+          read: i,
+          write: i
+        }), i += f.numComponents;
+  }
+}
+class j {
+  async build(t, i, f) {
+    f ? await E.init(f) : E.isInitialized || await E.init();
+    const c = new Y(t, i), d = new X(c, f), p = new V(c.dataContract), e = new H(c, d, p, f);
+    return new L(c, d, e, p);
+  }
+  /**
+   * Minimal helper to load a manifest from a URL.
+   */
+  async loadManifest(t) {
+    return (await fetch(t)).json();
+  }
+}
+class J {
+  constructor() {
+    B(this, "device");
+    B(this, "pipeline");
+    B(this, "batchBuffer");
+    this.device = E.device;
+    const i = this.device.createShaderModule({ code: `
+            struct SyncParams { srcOffset: u32, dstOffset: u32, count: u32, stride: u32 };
+            @group(0) @binding(0) var<storage, read_write> data: array<f32>;
+            @group(0) @binding(1) var<storage, read> batch: array<SyncParams>;
+            @compute @workgroup_size(64)
+            fn main(@builtin(local_invocation_id) local_id: vec3<u32>, @builtin(workgroup_id) wg_id: vec3<u32>) {
+                let p = batch[wg_id.x];
+                for (var i = local_id.x; i < p.count; i = i + 64u) {
+                    data[p.dstOffset + i * p.stride] = data[p.srcOffset + i * p.stride];
+                }
+            }
+        ` });
+    this.pipeline = this.device.createComputePipeline({
+      layout: "auto",
+      compute: { module: i, entryPoint: "main" }
+    });
+  }
+  syncAll(t, i, f, c) {
+    const d = i.gpuBuffer, p = t.dataContract, e = p.descriptor.requirements.ghostCells;
+    if (e === 0) return;
+    const n = [], o = f.currentTick, y = c === "read" ? o % 2 : 1 - o % 2, u = Math.floor(t.dimensions.nx / t.chunkLayout.x), g = Math.floor(t.dimensions.ny / t.chunkLayout.y), h = t.dimensions.nz > 1 ? Math.floor(t.dimensions.nz / t.chunkLayout.z) : 1, s = u + 2 * e, l = g + 2 * e, k = h > 1 ? h + 2 * e : 1, w = p.getFaceMappings(), m = [];
+    let M = 0;
+    for (const _ of w)
+      _.requiresSync && m.push(_.isPingPong ? M + y : M), M += _.isPingPong ? 2 : 1;
+    const v = i.totalSlotsPerChunk, G = i.strideFace;
+    for (let _ = 0; _ < t.chunks.length; _++) {
+      const U = t.chunks[_], S = _ * v * G;
+      for (const O of U.joints) {
+        if (O.role !== "joint" || !O.neighborId) continue;
+        const A = t.chunks.findIndex((T) => T.id === O.neighborId) * v * G;
+        for (const T of m) {
+          const C = S + T * G, x = A + T * G;
+          switch (O.face) {
+            case "left":
+              for (let r = 0; r < k; r++) for (let a = 0; a < e; a++)
+                n.push({ srcOffset: x + r * s * l + (u + a), dstOffset: C + r * s * l + a, count: g + 2 * e, stride: s });
+              break;
+            case "right":
+              for (let r = 0; r < k; r++) for (let a = 0; a < e; a++)
+                n.push({ srcOffset: x + r * s * l + (e + a), dstOffset: C + r * s * l + (u + e + a), count: g + 2 * e, stride: s });
+              break;
+            case "top":
+              for (let r = 0; r < k; r++) for (let a = 0; a < e; a++)
+                n.push({ srcOffset: x + r * s * l + (g + a) * s, dstOffset: C + r * s * l + a * s, count: u + 2 * e, stride: 1 });
+              break;
+            case "bottom":
+              for (let r = 0; r < k; r++) for (let a = 0; a < e; a++)
+                n.push({ srcOffset: x + r * s * l + (e + a) * s, dstOffset: C + r * s * l + (g + e + a) * s, count: u + 2 * e, stride: 1 });
+              break;
+            case "front":
+              if (h > 1)
+                for (let r = 0; r < e; r++)
+                  n.push({ srcOffset: x + (h + r) * s * l, dstOffset: C + r * s * l, count: s * l, stride: 1 });
+              break;
+            case "back":
+              if (h > 1)
+                for (let r = 0; r < e; r++)
+                  n.push({ srcOffset: x + (e + r) * s * l, dstOffset: C + (h + e + r) * s * l, count: s * l, stride: 1 });
+              break;
+            case "top-left":
+              for (let r = 0; r < k; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                n.push({ srcOffset: x + r * s * l + (g + a) * s + (u + b), dstOffset: C + r * s * l + a * s + b, count: 1, stride: 0 });
+              break;
+            case "top-right":
+              for (let r = 0; r < k; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                n.push({ srcOffset: x + r * s * l + (g + a) * s + (e + b), dstOffset: C + r * s * l + a * s + (u + e + b), count: 1, stride: 0 });
+              break;
+            case "bottom-left":
+              for (let r = 0; r < k; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                n.push({ srcOffset: x + r * s * l + (e + a) * s + (u + b), dstOffset: C + r * s * l + (g + e + a) * s + b, count: 1, stride: 0 });
+              break;
+            case "bottom-right":
+              for (let r = 0; r < k; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                n.push({ srcOffset: x + r * s * l + (e + a) * s + (e + b), dstOffset: C + r * s * l + (g + e + a) * s + (u + e + b), count: 1, stride: 0 });
+              break;
+            case "front-left":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++)
+                  n.push({ srcOffset: x + (h + r) * s * l + (u + a), dstOffset: C + r * s * l + a, count: g + 2 * e, stride: s });
+              break;
+            case "front-right":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++)
+                  n.push({ srcOffset: x + (h + r) * s * l + (e + a), dstOffset: C + r * s * l + (u + e + a), count: g + 2 * e, stride: s });
+              break;
+            case "front-top":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++)
+                  n.push({ srcOffset: x + (h + r) * s * l + (g + a) * s, dstOffset: C + r * s * l + a * s, count: u + 2 * e, stride: 1 });
+              break;
+            case "back-left":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++)
+                  n.push({ srcOffset: x + (e + r) * s * l + (u + a), dstOffset: C + (h + e + r) * s * l + a, count: g + 2 * e, stride: s });
+              break;
+            case "back-right":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++)
+                  n.push({ srcOffset: x + (e + r) * s * l + (e + a), dstOffset: C + (h + e + r) * s * l + (u + e + a), count: g + 2 * e, stride: s });
+              break;
+            case "back-top":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++)
+                  n.push({ srcOffset: x + (e + r) * s * l + (g + a) * s, dstOffset: C + (h + e + r) * s * l + a * s, count: u + 2 * e, stride: 1 });
+              break;
+            case "back-bottom":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++)
+                  n.push({ srcOffset: x + (e + r) * s * l + (e + a) * s, dstOffset: C + (h + e + r) * s * l + (g + e + a) * s, count: u + 2 * e, stride: 1 });
+              break;
+            case "front-top-left":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                  n.push({ srcOffset: x + (h + r) * s * l + (g + a) * s + (u + b), dstOffset: C + r * s * l + a * s + b, count: 1, stride: 0 });
+              break;
+            case "front-top-right":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                  n.push({ srcOffset: x + (h + r) * s * l + (g + a) * s + (e + b), dstOffset: C + r * s * l + a * s + (u + e + b), count: 1, stride: 0 });
+              break;
+            case "front-bottom-left":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                  n.push({ srcOffset: x + (h + r) * s * l + (e + a) * s + (u + b), dstOffset: C + r * s * l + (g + e + a) * s + b, count: 1, stride: 0 });
+              break;
+            case "front-bottom-right":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                  n.push({ srcOffset: x + (h + r) * s * l + (e + a) * s + (e + b), dstOffset: C + r * s * l + (g + e + a) * s + (u + e + b), count: 1, stride: 0 });
+              break;
+            case "back-top-left":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                  n.push({ srcOffset: x + (e + r) * s * l + (g + a) * s + (u + b), dstOffset: C + (h + e + r) * s * l + a * s + b, count: 1, stride: 0 });
+              break;
+            case "back-top-right":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                  n.push({ srcOffset: x + (e + r) * s * l + (g + a) * s + (e + b), dstOffset: C + (h + e + r) * s * l + a * s + (u + e + b), count: 1, stride: 0 });
+              break;
+            case "back-bottom-left":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                  n.push({ srcOffset: x + (e + r) * s * l + (e + a) * s + (u + b), dstOffset: C + (h + e + r) * s * l + (g + e + a) * s + b, count: 1, stride: 0 });
+              break;
+            case "back-bottom-right":
+              if (h > 1)
+                for (let r = 0; r < e; r++) for (let a = 0; a < e; a++) for (let b = 0; b < e; b++)
+                  n.push({ srcOffset: x + (e + r) * s * l + (e + a) * s + (e + b), dstOffset: C + (h + e + r) * s * l + (g + e + a) * s + (u + e + b), count: 1, stride: 0 });
+              break;
+          }
+        }
+      }
+    }
+    n.length > 0 && this.dispatchBatch(d, n);
+  }
+  dispatchBatch(t, i) {
+    const f = i.length * 16;
+    (!this.batchBuffer || this.batchBuffer.size < f) && (this.batchBuffer && this.batchBuffer.destroy(), this.batchBuffer = this.device.createBuffer({ size: Math.ceil(f / 256) * 256, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }));
+    const c = new Uint32Array(i.length * 4);
+    i.forEach((e, n) => {
+      c[n * 4 + 0] = e.srcOffset, c[n * 4 + 1] = e.dstOffset, c[n * 4 + 2] = e.count, c[n * 4 + 3] = e.stride;
+    }), this.device.queue.writeBuffer(this.batchBuffer, 0, c);
+    const d = this.device.createCommandEncoder(), p = d.beginComputePass();
+    p.setPipeline(this.pipeline), p.setBindGroup(0, this.device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: t } }, { binding: 1, resource: { buffer: this.batchBuffer } }] })), p.dispatchWorkgroups(Math.min(65535, i.length)), p.end(), this.device.queue.submit([d.finish()]);
+  }
+}
+class Q {
+  constructor(t) {
+    this.parityManager = t;
+  }
+  rasterizeChunk(t, i, f, c, d = "write") {
+    var w;
+    i.config;
+    const p = i.dataContract, e = p.descriptor, n = p.getFaceMappings(), o = i.getObjectsInChunk(t, c);
+    if (o.length === 0) return;
+    const y = f.getChunkViews(t.id).faces, u = t.localDimensions.nx, g = t.localDimensions.ny, h = e.requirements.ghostCells;
+    let s = 0, l = 0;
+    for (const m of i.chunks)
+      m.y === t.y && m.z === t.z && m.x < t.x && (s += m.localDimensions.nx), m.x === t.x && m.z === t.z && m.y < t.y && (l += m.localDimensions.ny);
+    const k = u + 2 * h;
+    for (const m of o) {
+      if (m.isBaked === !1) continue;
+      let M = m.position.x, v = m.position.y;
+      (w = m.animation) != null && w.velocity && (M += m.animation.velocity.x * c, v += m.animation.velocity.y * c);
+      for (const [G, _] of Object.entries(m.properties)) {
+        const U = e.faces.findIndex((z) => z.name === G);
+        if (U === -1) continue;
+        let S;
+        if (this.parityManager) {
+          const z = this.parityManager.getFaceIndices(G);
+          S = d === "read" ? z.read : z.write;
+        } else {
+          let z = 0;
+          for (let A = 0; A < U; A++) z += n[A].isPingPong ? 2 : 1;
+          S = z;
+        }
+        const O = y[S];
+        this.rasterizeShape(m, M, v, _, O, s, l, u, g, k, h);
+      }
+    }
+  }
+  rasterizeShape(t, i, f, c, d, p, e, n, o, y, u) {
+    var U;
+    const g = t.type === "circle" ? t.dimensions.w / 2 : 0, h = ((U = t.influence) == null ? void 0 : U.radius) || 0, s = g + h, l = Math.floor(i - s), k = Math.ceil(i + t.dimensions.w + s), w = Math.floor(f - s), m = Math.ceil(f + t.dimensions.h + s), M = Math.max(u, l - p + u), v = Math.min(n + u, k - p + u), G = Math.max(u, w - e + u), _ = Math.min(o + u, m - e + u);
+    for (let S = G; S < _; S++)
+      for (let O = M; O < v; O++) {
+        const z = p + (O - u), A = e + (S - u);
+        let T = 0;
+        if (t.type === "circle" ? T = Math.sqrt(Math.pow(z - (i + g), 2) + Math.pow(A - (f + g), 2)) <= g ? 1 : 0 : t.type === "rect" && z >= i && z < i + t.dimensions.w && A >= f && A < f + t.dimensions.h && (T = 1), T > 0) {
+          const C = S * y + O, x = c * T;
+          switch (t.rasterMode) {
+            case "add":
+              d[C] += x;
+              break;
+            case "replace":
+            default:
+              d[C] = x;
+              break;
+          }
+        }
+      }
+  }
+}
+export {
+  K as BoundaryCode,
+  $ as BoundaryRoleID,
+  N as DataContract,
+  J as GpuBoundarySynchronizer,
+  j as GpuCoreFactory,
+  H as GpuDispatcher,
+  L as GpuEngine,
+  E as HypercubeGPUContext,
+  D as MapConstructor,
+  X as MasterBuffer,
+  q as MemoryLayout,
+  Q as ObjectRasterizer,
+  V as ParityManager,
+  W as TopologyResolver,
+  Y as VirtualGrid
+};
