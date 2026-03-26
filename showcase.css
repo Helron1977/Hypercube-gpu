@@ -1,0 +1,297 @@
+:root {
+    --bg: #050505;
+    --acc: #00ffb4;
+    --acc-soft: rgba(0, 255, 180, 0.1);
+    --text: #ffffff;
+    --text-dim: #888888;
+    --border: #1a1a1a;
+    --panel: rgba(20, 20, 20, 0.8);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+    background-image: 
+        linear-gradient(rgba(26, 26, 26, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(26, 26, 26, 0.1) 1px, transparent 1px);
+    background-size: 50px 50px;
+}
+
+header {
+    height: 450px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: #000;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid #004d1a;
+}
+
+/* Matrix Monitor Effect - Updated to #00ffb4 */
+.monitor-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    /* Static Scanlines & Pixel Grid */
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%), 
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02), rgba(0, 255, 180, 0.01), rgba(0, 0, 0, 0.05));
+    background-size: 100% 4px, 4px 100%;
+    pointer-events: none;
+    z-index: 10;
+    image-rendering: pixelated;
+}
+
+.hero-video-container {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 1;
+    background: #000;
+}
+
+.hero-video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Better for scientific visualization */
+    filter: brightness(0.9) contrast(1.1) saturate(1.1);
+    image-rendering: pixelated;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.hero-evolution-svg {
+    width: 250px;
+    height: 250px;
+    filter: drop-shadow(0 0 10px #00ffb4);
+    z-index: 2;
+    margin-bottom: 20px;
+    image-rendering: pixelated;
+    animation: jitter 0.2s infinite;
+}
+
+@keyframes jitter {
+    0% { transform: translate(1px, 1px) rotate(0deg); }
+    50% { transform: translate(-1px, -1px) rotate(0.1deg); }
+    100% { transform: translate(1px, 1px) rotate(0deg); }
+}
+
+.wireframe {
+    fill: none;
+    stroke: #00ffb4;
+    stroke-width: 2; /* Thicker for low-pixel feel */
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+}
+
+/* Animation Evolution */
+@keyframes evolve {
+    0% { transform: scale(0.1) rotate(0deg); opacity: 0; }
+    5% { opacity: 1; }
+    20% { transform: scale(0.3) rotate(90deg); }   /* Cell */
+    40% { transform: scale(0.5) rotate(180deg); }  /* Box */
+    60% { transform: scale(0.7) rotate(270deg); }  /* Cube */
+    80% { transform: scale(1.0) rotate(360deg); }  /* Tesseract */
+    95% { opacity: 1; }
+    100% { transform: scale(1.1) rotate(400deg); opacity: 0; }
+}
+
+.animate-evolve {
+    animation: evolve 8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: center;
+}
+
+h1 {
+    font-size: 2.5rem; /* Reduced from 3.5rem */
+    letter-spacing: 0.3em;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #ffffff;
+    margin-bottom: 0.5rem;
+}
+
+.tagline {
+    font-size: 1.2rem;
+    color: var(--acc);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 3rem;
+}
+
+section {
+    max-width: 1200px;
+    margin: 100px auto;
+    padding: 0 20px;
+}
+
+.section-head {
+    border-left: 4px solid var(--acc);
+    padding-left: 20px;
+    margin-bottom: 50px;
+}
+
+h2 {
+    font-size: 2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 40px;
+}
+
+.card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 0;
+    border-radius: 4px;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.card-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text);
+}
+
+.core-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--acc);
+    background: var(--acc-soft);
+    padding: 4px 10px;
+    border-radius: 100px;
+}
+
+.card-body {
+    padding: 20px;
+    flex-grow: 1;
+}
+
+.spec-table {
+    width: 100%;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    margin-top: 20px;
+}
+
+.spec-table tr {
+    border-bottom: 1px solid #111;
+}
+
+.spec-table td {
+    padding: 8px 0;
+}
+
+.spec-label {
+    color: var(--text-dim);
+}
+
+.spec-val {
+    text-align: right;
+    color: var(--text);
+}
+
+.status-passed { color: var(--acc); }
+
+.card-footer {
+    padding: 15px 20px;
+    background: #0a0a0a;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-align: right;
+}
+
+.gallery-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.gallery-item {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.gallery-item img {
+    width: 100%;
+    height: auto;
+    display: block;
+    filter: saturate(0.8) contrast(1.1);
+    transition: 0.5s;
+}
+
+.gallery-item:hover img {
+    filter: saturate(1.2) contrast(1.2);
+    transform: scale(1.02);
+}
+
+.stats-bar {
+    display: flex;
+    justify-content: space-around;
+    padding: 50px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 100px;
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: var(--acc);
+}
+
+.stat-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.8; }
+}
+
+footer {
+    padding: 50px;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-family: 'JetBrains Mono', monospace;
+}

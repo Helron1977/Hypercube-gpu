@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU - The Universal Simulation Core</title>
+    <link rel="stylesheet" href="showcase.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header style="border-bottom: 2px solid #00ffb4;">
+    <div class="monitor-overlay"></div>
+    
+    <div class="hero-video-container">
+        <video autoplay loop muted playsinline class="hero-video">
+            <source src="docs/assets/Animation_D_Tesseract_Data_Matrix.mp4" type="video/mp4">
+            <!-- Fallback for browsers -->
+        </video>
+    </div>
+
+    <div class="hero-content">
+        <h1 style="font-family: 'JetBrains Mono'; letter-spacing: 0.5em; border: 1px solid #00ffb4; padding: 15px 30px; background: rgba(0, 255, 180, 0.1); color: #00ffb4; text-shadow: 0 0 10px rgba(0, 255, 180, 0.5);">HYPERCUBE</h1>
+        <div class="tagline" style="color: #00ffb4; margin-top: 15px; font-weight: 700;">UNIVERSAL REGISTRY</div>
+    </div>
+</header>
+
+<section id="tech-stack">
+    <div class="section-head">
+        <h2>Industrial Foundation</h2>
+    </div>
+    <div class="grid">
+        <div class="card">
+            <div class="card-header"><h3>WebGPU Native</h3></div>
+            <div class="card-body">
+                <p>Direct access to hardware-accelerated compute pipelines. Precision-tuned for modern architectures (NVIDIA, AMD, Apple, Intel).</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>Mother-Model Architecture</h3></div>
+            <div class="card-body">
+                <p>Generic simulation dispatcher designed to host any lattice-based model: LBM, FDTD, Poisson, or Tensor Analytics.</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>Matrix Optimisation</h3></div>
+            <div class="card-body">
+                <p>Zero-bottleneck memory layout (Grouped Parity) ensuring maximum coalesced memory access throughput.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="stats-bar">
+    <div class="stat">
+        <div class="stat-val">> 50</div>
+        <div class="stat-label">MLUPS (LBM 2D)</div>
+    </div>
+    <div class="stat">
+        <div class="stat-val">100%</div>
+        <div class="stat-label">WebGPU Source</div>
+    </div>
+    <div class="stat">
+        <div class="stat-val">0</div>
+        <div class="stat-label">CPU Dependency</div>
+    </div>
+</div>
+
+<section id="module-catalog">
+    <div class="section-head">
+        <h2>Scientific Module Registry</h2>
+        <p style="color: var(--text-dim); font-size: 0.9rem; margin-top: 10px;">Hardware-accelerated kernels identified and integrated in the Hypercube Core.</p>
+    </div>
+
+    <!-- 1. FLUID & ACOUSTIC DYNAMICS -->
+    <h3 style="color: #666; font-size: 0.8rem; text-transform: uppercase; margin: 40px 0 20px; letter-spacing: 0.2em; border-bottom: 1px solid #1a1a1a; padding-bottom: 10px;">Domain: Fluid & Acoustic Dynamics</h3>
+    <div class="grid">
+        <div class="card">
+            <div class="card-header"><h3>LBM 2D</h3><span class="core-badge">D2Q9</span></div>
+            <div class="card-body">
+                <p>High-fidelity fluid dynamics with vorticity and density monitors. Stricly validated.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Throughput</td><td class="spec-val">52.4 MLUPS (Measured)</td></tr>
+                    <tr><td class="spec-label">Audit</td><td class="spec-val status-passed">PASSED [LBM_01]</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>Wave 2D</h3><span class="core-badge">SCALAR</span></div>
+            <div class="card-body">
+                <p>Acoustic and ripple propagation with multi-boundary interference handling.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Throughput</td><td class="spec-val">42.1 MLUPS (Measured)</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>LBM 3D</h3><span class="core-badge">D3Q19</span></div>
+            <div class="card-body">
+                <p>Navier-Stokes lattice implementation for volumetric airflow and turbulence.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">Benchmarking...</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. FIELD & ELECTROMAGNETICS -->
+    <h3 style="color: #666; font-size: 0.8rem; text-transform: uppercase; margin: 40px 0 20px; letter-spacing: 0.2em; border-bottom: 1px solid #1a1a1a; padding-bottom: 10px;">Domain: Field & Electromagnetics</h3>
+    <div class="grid">
+        <div class="card">
+            <div class="card-header"><h3>Maxwell FDTD</h3><span class="core-badge">EM VECTOR</span></div>
+            <div class="card-body">
+                <p>Yee-grid implementation for electromagnetic wave propagation in vacuum.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">Validated</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>Poisson Solver</h3><span class="core-badge">POTENTIAL</span></div>
+            <div class="card-body">
+                <p>Steady-state solver for gravity, electrostatics and pressure correction.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">Validated</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>Heat Diffusion</h3><span class="core-badge">TRANSFERS</span></div>
+            <div class="card-body">
+                <p>Thermal and mass diffusion solver with transient state stability.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">Validated</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. GEOMETRIC COMPUTE -->
+    <h3 style="color: #666; font-size: 0.8rem; text-transform: uppercase; margin: 40px 0 20px; letter-spacing: 0.2em; border-bottom: 1px solid #1a1a1a; padding-bottom: 10px;">Domain: Geometric & Procedural</h3>
+    <div class="grid">
+        <div class="card">
+            <div class="card-header"><h3>Jump Flood (JFA)</h3><span class="core-badge">VORONOI</span></div>
+            <div class="card-body">
+                <p>Logarithmic step optimization for distance fields and Voronoi diagrams.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Complexity</td><td class="spec-val">O(log N)</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>Procedural Noise</h3><span class="core-badge">8D ENGINE</span></div>
+            <div class="card-body">
+                <p>Hardware-accelerated Perlin, Simplex and Worley noise generation.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">Benchmarking...</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>SDF Analytic</h3><span class="core-badge">DISTANCE FIELD</span></div>
+            <div class="card-body">
+                <p>Signed Distance Functions for real-time collision and occlusion.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">Benchmarking...</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. COMPLEX SYSTEMS -->
+    <h3 style="color: #666; font-size: 0.8rem; text-transform: uppercase; margin: 40px 0 20px; letter-spacing: 0.2em; border-bottom: 1px solid #1a1a1a; padding-bottom: 10px;">Domain: Complex Systems</h3>
+    <div class="grid">
+        <div class="card">
+            <div class="card-header"><h3>Cellular Automata</h3><span class="core-badge">D2Q9</span></div>
+            <div class="card-body">
+                <p>Discrete biological modeling system for Turing patterns and Cellular Automata rules.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">Validated</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>Mandelbulb 3D</h3><span class="core-badge">FRACTAL</span></div>
+            <div class="card-body">
+                <p>Massively parallel ray-matching of 3D fractal manifolds.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">R&D / Benchmarking</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. TENSOR ANALYTICS -->
+    <h3 style="color: #666; font-size: 0.8rem; text-transform: uppercase; margin: 40px 0 20px; letter-spacing: 0.2em; border-bottom: 1px solid #1a1a1a; padding-bottom: 10px;">Domain: Tensor Analytics</h3>
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));">
+        <div class="card">
+            <div class="card-header"><h3>Tensor CP</h3><span class="core-badge">CP-DECOMP</span></div>
+            <div class="card-body">
+                <p>Canonical Polyadic decomposition for multidimensional data analysis on GPU.</p>
+                <table class="spec-table">
+                    <tr><td class="spec-label">Status</td><td class="spec-val">Validated</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="glossary">
+    <div style="background: #0a0a0a; border: 1px solid var(--border); padding: 30px; border-radius: 4px;">
+        <h3 style="color: #00ff41; font-family: 'JetBrains Mono'; font-size: 0.9rem; margin-bottom: 15px;">TECHNICAL DEFINITION: MLUPS</h3>
+        <p style="font-size: 0.85rem; color: var(--text-dim);">
+            <strong>Mega Lattice Updates Per Second (MLUPS)</strong> is the measurement for simulation throughput. 
+            It represents the volume of numerical updates processed by the GPU core every second. 
+            A performance of 50+ MLUPS indicates over 50 million discrete cell states computed per second.
+        </p>
+    </div>
+</section>
+
+<footer>
+    <p>HYPERCUBE GPU CORE // 2026 // SCIENTIFIC AUDIT COMPLETED</p>
+</footer>
+
+</body>
+</html>
