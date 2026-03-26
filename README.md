@@ -1,4 +1,4 @@
-# @hypercube/gpu-core
+# hypercube-gpu-core
 **Direct WebGPU Compute Core for Scientific Research & Industrial Simulation.**
 
 A deterministic, high-concurrency architecture designed for Lattice Boltzmann (LBM), FDTD, and Poisson-Boltzmann numerical methods. The core implements a zero-copy memory model to maximize effective VRAM bandwidth.
@@ -49,13 +49,13 @@ The core framework provides a library of validated "Mother-Models" representing 
 
 ## Installation & Usage
 ```bash
-npm install @hypercube/gpu-core 
+npm install hypercube-gpu-core 
 ```
 
 ## Usage
 
 ```typescript
-import { GpuCoreFactory, HypercubeGPUContext } from '@hypercube/gpu-core';
+import { GpuCoreFactory, HypercubeGPUContext } from 'hypercube-gpu-core';
 
 // 1. Initialize GPU Context
 await HypercubeGPUContext.init();
