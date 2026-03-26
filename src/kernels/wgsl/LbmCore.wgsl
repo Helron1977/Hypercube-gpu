@@ -33,8 +33,9 @@ fn lbm_feq(rho: f32, ux: f32, uy: f32, d: u32) -> f32 {
 }
 
 fn get_f_idx(d: u32, parity: u32, strideFace: u32, fBase: u32, i: u32) -> u32 {
-    // MasterBuffer entrelace les buffers ping/pong : f0_ping, f0_pong, f1_ping, f1_pong...
-    return (fBase + d * 2u + parity) * strideFace + i;
+    // Dans le layout Hypercube, Ping/Pong sont groupés par face.
+    // Pour une face à 9 composants : Slots [Ping: 0..8, Pong: 9..17]
+    return (fBase + (parity * 9u) + d) * strideFace + i;
 }
 
 @compute @workgroup_size(16, 16)
@@ -175,6 +176,14 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     data[params.f1 * strideFace + i] = ux;
     data[params.f2 * strideFace + i] = uy;
     data[params.f3 * strideFace + i] = rho;
+
+    // --- 5. VORTICITY (CURL) CALCULATION ---
+    // On utilise les vitesses des voisins (tick précédent) pour le gradient
+    let ux_top = data[params.f1 * strideFace + (i + lx)];
+    let ux_bot = data[params.f1 * strideFace + (i - lx)];
+    let uy_rit = data[params.f2 * strideFace + (i + 1u)];
+    let uy_lef = data[params.f2 * strideFace + (i - 1u)];
+    data[params.f4 * strideFace + i] = (uy_rit - uy_lef) - (ux_top - ux_bot);
 
     let omega = params.p0;
     for (var d = 0u; d < 9u; d = d + 1u) {

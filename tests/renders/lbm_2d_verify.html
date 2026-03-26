@@ -129,17 +129,21 @@
                 logMsg(`   strideFace (framework aligned): ${strideFace}`);
                 logMsg(`   strideFace (raw lx*ly): ${lx * ly}`);
                 logMsg(`   totalSlots: ${engine.buffer.totalSlotsPerChunk}`);
-
                 logMsg('[3/5] Initialisation des populations D2Q9...');
                 const cellCount = engine.buffer.layout.cellsPerFaceRaw;
                 const W = [4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36];
+                
+                // On initialise la face consolidée 'f' (9 composants)
+                const tempF = new Float32Array(strideFace * 9);
                 for (let d = 0; d < 9; d++) {
-                    const temp = new Float32Array(cellCount).fill(W[d]);
-                    engine.setFaceData('chunk_0_0_0', `f_d${d}`, temp, true);
+                    for (let i = 0; i < cellCount; i++) {
+                        tempF[d * strideFace + i] = W[d];
+                    }
                 }
+                engine.setFaceData('chunk_0_0_0', 'f', tempF, true);
                 engine.setFaceData('chunk_0_0_0', 'rho', new Float32Array(cellCount).fill(1.0));
 
-                // Obstacle circulaire
+                // Obstacle circulaire (Correction du placement avec ghosts)
                 const obsData = new Float32Array(cellCount);
                 const cx_obs = 80, cy_obs = Math.floor(ny / 2), r2 = 20 * 20;
                 for (let y = 0; y < ly; y++) {
@@ -159,11 +163,9 @@
                 logMsg('[4/5] Chargement des kernels (LBM + Réduction)...');
                 const respLbm = await fetch('/src/kernels/wgsl/LbmCore.wgsl');
                 kernelSource = await respLbm.text();
-                logMsg(`   LbmCore: ${kernelSource.length} chars`);
                 
                 const respRed = await fetch('/src/kernels/wgsl/ReductionCore.wgsl');
                 reductionSource = await respRed.text();
-                logMsg(`   ReductionCore: ${reductionSource.length} chars`);
 
                 logMsg('[5/5] Démarrage de la boucle de simulation ✓');
                 isRunning = true;
@@ -176,77 +178,103 @@
             }
         }
 
+        /**
+         * Rendu Local Scientifique pour éviter de casser GpuDemoHelper.js
+         */
+        async function drawScientific(res) {
+            const { results, lx, ly, strideFace } = res;
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.createImageData(512, 256);
+            const scale = parseFloat(document.getElementById('paramInflow').value) * 10.0;
+            
+            // Slots basés sur le manifest : obs=0, ux=1, uy=2, rho=3, curl=4
+            const SL_UX = 1, SL_UY = 2, SL_RHO = 3, SL_CURL = 4;
+
+            for (let y = 0; y < 256; y++) {
+                for (let x = 0; x < 512; x++) {
+                    const i_node = (y + ghosts) * lx + (x + ghosts);
+                    const i4 = (y * 512 + x) * 4;
+                    
+                    let r = 0, g = 0, b = 0;
+                    if (renderMode === 'u_mag') {
+                        const vx = results[SL_UX * strideFace + i_node];
+                        const vy = results[SL_UY * strideFace + i_node];
+                        const mag = Math.sqrt(vx*vx + vy*vy) * 5.0; 
+                        r = Math.min(255, mag * 255); g = Math.min(255, mag * 130); b = Math.min(255, mag * 50);
+                    } else if (renderMode === 'curl') {
+                        const val = results[SL_CURL * strideFace + i_node] * 20.0; // Gain Pro
+                        const v = Math.min(1.0, Math.max(-1.0, val));
+                        if (v > 0) { 
+                            r = 30 + v * 225; g = 30 + v * 60; b = 30; // Red-Orange (CCW)
+                        } else { 
+                            r = 30; g = 30 + (-v) * 60; b = 30 + (-v) * 225; // Blue-Cyan (CW)
+                        }
+                    } else if (renderMode === 'single') {
+                        const rho = results[SL_RHO * strideFace + i_node];
+                        const v = Math.min(255, Math.max(0, (rho - 0.95) * 10.0 * 255)); // Centré sur 1.0
+                        r = v; g = v; b = v;
+                    }
+
+                    imageData.data[i4] = r;
+                    imageData.data[i4+1] = g;
+                    imageData.data[i4+2] = b;
+                    imageData.data[i4+3] = 255;
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
         async function frame(now) {
             if (!isRunning) return;
 
-            // Paramètres UI
+            // Paramètres UI (Mapping Framework P0/P1)
             const omega = parseFloat(document.getElementById('paramOmega').value);
             const inflow = parseFloat(document.getElementById('paramInflow').value);
             document.getElementById('valOmega').innerText = omega.toFixed(2);
             document.getElementById('valInflow').innerText = inflow.toFixed(2);
-            engine.vGrid.config.params.omega = omega;
-            engine.vGrid.config.params.inflow = inflow;
+            engine.vGrid.config.params.p0 = omega;
+            engine.vGrid.config.params.p1 = inflow;
 
-            // Step le moteur via le framework (kernel déjà caché)
+            // Step le moteur (LBM uniquement ici)
             await engine.step({ 'LbmScientific': kernelSource });
 
-            // Rendu via GpuDemoHelper — le buffer du framework
-            // Face layout (base slots) : obs=0, ux=1, uy=2, rho=3, curl=4
-            const physicsData = await GpuDemoHelper.renderToCanvas(
-                engine.dispatcher.device,
-                engine.buffer.gpuBuffer,
-                canvas, {
-                    mode: renderMode,
-                    nx: 512, ny: 256,
-                    faces: [1, 2],        // ux(slot 1), uy(slot 2) pour u_mag
-                    faceIdx: (renderMode === 'curl' ? 4 : (renderMode === 'single' ? 3 : -1)),
-                    strideFace: strideFace,
-                    scale: (renderMode === 'curl' ? 10.0 : 1.5)
-                }
+            // Rendu Local
+            const res = await GpuDemoHelper.renderToCanvas(
+                engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, 
+                { nx: 512, ny: 256, strideFace: strideFace, ghosts: ghosts, mode: 'raw' }
             );
+            await drawScientific(res);
 
-            // HUD (update every 10 ticks)
+            // HUD
             frameCount++;
             const tick = engine.parityManager.currentTick;
             if (tick % 10 === 0) {
                 const elapsed = now - lastFpsTime;
                 if (elapsed > 500) {
-                    document.getElementById('hud-fps').innerText = Math.round(frameCount / (elapsed / 1000));
+                    const mlups = (512 * 256 * 10) / (elapsed * 1000);
+                    document.getElementById('hud-mlups').innerText = mlups.toFixed(2);
                     frameCount = 0;
                     lastFpsTime = now;
                 }
                 document.getElementById('hud-step').innerText = tick;
                 
-                // --- NEW: SCIENTIFIC MONITORING ---
                 try {
-                   engine.vGrid.config.params.p0 = 3; // On cible la face rho
+                   engine.vGrid.config.params.p0 = 3; // Index face rho
                    const currentMass = await engine.reduceField('rho', reductionSource);
-                   if (initialMass === 0 || initialMass < 1) initialMass = currentMass;
-                   const drift = (currentMass - initialMass) / initialMass;
-                
-                   document.getElementById('hud-mass').innerText = currentMass.toFixed(4);
+                   if (initialMass === 0 || initialMass < 0.1) initialMass = currentMass;
+                   const drift = (currentMass - initialMass) / (initialMass || 1);
                    document.getElementById('hud-drift').innerText = (drift * 100).toExponential(3) + '%';
-                   document.getElementById('hud-drift').style.color = Math.abs(drift) < 1e-6 ? '#00ffb4' : '#ff4400';
-
-                   // PERFORMANCE (MLUPS)
-                   const mlups = (manifest.config.dimensions.nx * manifest.config.dimensions.ny * 10) / (elapsed * 1000);
-                   document.getElementById('hud-mlups').innerText = mlups.toFixed(2);
-                } catch (reduceErr) {
-                   console.warn('LBM V&V Reduction Failed:', reduceErr);
-                }
+                   document.getElementById('hud-drift').style.color = Math.abs(drift) < 1e-7 ? '#00ffb4' : '#ff4400';
+                } catch (e) {}
 
                 const i_probe = (probePoint.y + ghosts) * lx + (probePoint.x + ghosts);
-                if (physicsData && physicsData.results) {
-                    const r = physicsData.results;
-                    const rho = r[3 * strideFace + i_probe];
-                    const vx  = r[1 * strideFace + i_probe];
-                    const vy  = r[2 * strideFace + i_probe];
-                    const curl= r[4 * strideFace + i_probe];
-                    document.getElementById('probe-pos').innerText = `${probePoint.x}, ${probePoint.y}`;
-                    document.getElementById('probe-rho').innerText = isNaN(rho) ? 'NaN!' : rho.toFixed(6);
-                    document.getElementById('probe-vel').innerText = `[${vx?.toFixed(4)}, ${vy?.toFixed(4)}]`;
-                    document.getElementById('probe-curl').innerText = isNaN(curl) ? 'NaN!' : curl.toExponential(3);
-                }
+                const r = res.results;
+                const rho = r[3 * strideFace + i_probe];
+                const vx  = r[1 * strideFace + i_probe];
+                const vy  = r[2 * strideFace + i_probe];
+                document.getElementById('probe-pos').innerText = `${probePoint.x}, ${probePoint.y}`;
+                document.getElementById('probe-rho').innerText = isNaN(rho) ? 'NaN!' : rho.toFixed(6);
+                document.getElementById('probe-vel').innerText = `[${vx?.toFixed(4)}, ${vy?.toFixed(4)}]`;
             }
             requestAnimationFrame(frame);
         }

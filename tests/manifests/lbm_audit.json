@@ -34,15 +34,7 @@
       { "name": "uy", "type": "macro", "isSynchronized": false },
       { "name": "rho", "type": "scalar", "isSynchronized": false },
       { "name": "curl", "type": "scalar", "isSynchronized": false },
-      { "name": "f_d0", "type": "population", "isSynchronized": true },
-      { "name": "f_d1", "type": "population", "isSynchronized": true },
-      { "name": "f_d2", "type": "population", "isSynchronized": true },
-      { "name": "f_d3", "type": "population", "isSynchronized": true },
-      { "name": "f_d4", "type": "population", "isSynchronized": true },
-      { "name": "f_d5", "type": "population", "isSynchronized": true },
-      { "name": "f_d6", "type": "population", "isSynchronized": true },
-      { "name": "f_d7", "type": "population", "isSynchronized": true },
-      { "name": "f_d8", "type": "population", "isSynchronized": true }
+      { "name": "f", "type": "population", "components": 9, "isSynchronized": true }
     ],
     "rules": [
       { "type": "LbmScientific", "source": "/src/kernels/wgsl/LbmCore.wgsl" }
