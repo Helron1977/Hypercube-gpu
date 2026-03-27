@@ -62,7 +62,7 @@ export interface NumericalScheme {
     faces?: string[];
 }
 
-export interface EngineDescriptor {
+export interface EngineDescriptor<TFaces = any> {
     name: string;
     version: string;
     faces: EngineFace[];
@@ -91,7 +91,7 @@ export interface VirtualObject {
     isBaked?: boolean; 
 }
 
-export interface HypercubeConfig {
+export interface HypercubeConfig<TParams = any> {
     dimensions: Dimension3D;
     chunks: {
         x: number;
@@ -100,13 +100,13 @@ export interface HypercubeConfig {
     };
     boundaries: GridBoundaries;
     engine: string;
-    params: Record<string, any>;
+    params: TParams;
     objects?: VirtualObject[];
 }
 
-export interface HypercubeManifest {
+export interface HypercubeManifest<TParams = any, TFaces = any> {
     name: string;
     version: string;
-    engine: EngineDescriptor;
-    config: HypercubeConfig;
+    engine: EngineDescriptor<TFaces>;
+    config: HypercubeConfig<TParams>;
 }

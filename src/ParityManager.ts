@@ -17,11 +17,26 @@ export class ParityManager {
         this.updateCache();
     }
 
-    public getFaceIndices(faceName: string): { base: number; read: number; write: number } {
+    public getFaceIndices(faceName: string, modulo: number = 2): { base: number; read: number; write: number } {
         const indices = this.faceIndexCache.get(faceName);
         if (!indices) {
             throw new Error(`ParityManager: Face '${faceName}' not found.`);
         }
+        
+        // If the user requests a different modulo (e.g. 3 for WAVE), we override the cache logic
+        if (modulo > 2) {
+            const mappings = this.dataContract.getFaceMappings();
+            const m = mappings.find(f => f.name === faceName);
+            if (m && m.isPingPong) {
+                const tick = this.currentTick % modulo;
+                return {
+                    base: indices.base,
+                    read: indices.base + (tick * m.numComponents),
+                    write: indices.base + (((tick + 1) % modulo) * m.numComponents)
+                };
+            }
+        }
+
         return indices;
     }
 

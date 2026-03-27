@@ -31,7 +31,7 @@ Absolute throughput and numerical precision can be verified through the integrat
 
 
 ## Scientific Solver Taxonomy (Mother-Models)
-The core framework provides a library of validated "Mother-Models" representing the state-of-the-art in numerical physics. Refer to the [Technical Documentation Hub](./docs/README.md) for full theory.
+The core framework provides a library of validated "Mother-Models". Refer to the [Technical Documentation Hub](./docs/README.md) and our [User Quickstart](./docs/USER_QUICKSTART.md).
 
 | Discipline | Model | Methodology | Status |
 | :--- | :--- | :--- | :--- |
@@ -49,13 +49,13 @@ The core framework provides a library of validated "Mother-Models" representing 
 
 ## Installation & Usage
 ```bash
-npm install hypercube-gpu-core 
+npm install @hypercube/gpu-core 
 ```
 
 ## Usage
 
 ```typescript
-import { GpuCoreFactory, HypercubeGPUContext } from 'hypercube-gpu-core';
+import { GpuCoreFactory, HypercubeGPUContext } from '@hypercube/gpu-core';
 
 // 1. Initialize GPU Context
 await HypercubeGPUContext.init();

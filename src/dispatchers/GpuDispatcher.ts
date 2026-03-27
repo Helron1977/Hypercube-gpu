@@ -145,7 +145,7 @@ export class GpuDispatcher {
                 const dim = this.dispatchMetadata[i].vChunk.localDimensions;
                 const ghosts = descriptor.requirements.ghostCells || 0;
 
-                const strideRow = this.buffer.layout?.strideRow || (dim.nx + 2);
+                const strideRow = (dim.nx + (ghosts * 2));
                 u32Data[base + 0] = dim.nx;
                 u32Data[base + 1] = dim.ny;
                 u32Data[base + 2] = strideRow;
@@ -157,15 +157,14 @@ export class GpuDispatcher {
                 u32Data[base + 7] = faceMappings.length;
 
                 const configParams = this.vGrid.config.params || {};
-                const REDUCTION_SCALE = 1000000000.0;
                 for (let p = 0; p < 8; p++) {
                     const key = `p${p}`;
                     let val = (scheme.params && scheme.params[key] !== undefined) ? scheme.params[key] : configParams[key];
-                    f32Data[base + 8 + p] = (typeof val === 'number') ? val : (p === 7 ? REDUCTION_SCALE : 0);
+                    f32Data[base + 8 + p] = (typeof val === 'number') ? val : 0;
                 }
 
                 const explicitFaces = scheme.faces || [];
-                for (let f = 0; f < 16; f++) {
+                for (let f = 0; f < 64; f++) {
                     let faceNameWithSuffix = "";
                     if (f < explicitFaces.length) {
                         faceNameWithSuffix = explicitFaces[f];
@@ -175,7 +174,7 @@ export class GpuDispatcher {
 
                     if (faceNameWithSuffix) {
                         const faceName = faceNameWithSuffix.replace('.read', '').replace('.write', '');
-                        const res = this.parityManager.getFaceIndices(faceName);
+                        const res = this.parityManager.getFaceIndices(faceName, scheme.params?.modulo as number || 2);
                         if (faceNameWithSuffix.endsWith('.read')) {
                             u32Data[base + 16 + f] = res.read;
                         } else if (faceNameWithSuffix.endsWith('.write')) {
@@ -265,6 +264,49 @@ export class GpuDispatcher {
         });
         this.bindGroupCache.set(key, bg);
         return bg;
+    }
+
+    public getWgslHeader(ruleType: string): string {
+        const descriptor = this.vGrid.dataContract.descriptor;
+        const rule = descriptor.rules.find(r => r.type === ruleType);
+        const explicitFaces = rule?.faces || [];
+        const faceMappings = this.vGrid.dataContract.getFaceMappings();
+
+        let header = `// Hypercube Auto-Generated Header for Rule: ${ruleType}\n`;
+        header += `struct HypercubeUniforms {\n`;
+        header += `  nx: u32, ny: u32, strideRow: u32, physicalNy: u32,\n`;
+        header += `  t: f32, tick: u32, strideFace: u32, numFaces: u32,\n`;
+        header += `  p0: f32, p1: f32, p2: f32, p3: f32,\n`;
+        header += `  p4: f32, p5: f32, p6: f32, p7: f32,\n`;
+        header += `  faces: array<u32, 64>\n`;
+        header += `};\n\n`;
+        header += `@group(0) @binding(0) var<storage, read_write> data: array<f32>;\n`;
+        header += `@group(0) @binding(1) var<uniform> uniforms: HypercubeUniforms;\n\n`;
+        
+        // Add face-specific constants
+        for (let f = 0; f < 64; f++) {
+            let faceName = "";
+            if (f < explicitFaces.length) {
+                faceName = explicitFaces[f];
+            } else if (f < faceMappings.length && explicitFaces.length === 0) {
+                faceName = faceMappings[f].name;
+            }
+            
+            if (faceName) {
+                let cleanName = faceName.replace('.', '_');
+                if (faceName.endsWith('.read')) cleanName = faceName.replace('.read', '_Read');
+                if (faceName.endsWith('.write')) cleanName = faceName.replace('.write', '_Write');
+
+                header += `const ${cleanName}: u32 = uniforms.faces[${f}];\n`;
+                
+                // Add helper functions for read/write
+                header += `fn read_${cleanName}(x: u32, y: u32) -> f32 { return data[${cleanName} * uniforms.strideFace + getIndex(x, y)]; }\n`;
+                header += `fn write_${cleanName}(x: u32, y: u32, val: f32) { data[${cleanName} * uniforms.strideFace + getIndex(x, y)] = val; }\n`;
+            }
+        }
+
+        header += `\nfn getIndex(x: u32, y: u32) -> u32 { return y * uniforms.strideRow + x; }\n`;
+        return header;
     }
 
     private async getPipeline(type: string, source: string): Promise<GPUComputePipeline> {

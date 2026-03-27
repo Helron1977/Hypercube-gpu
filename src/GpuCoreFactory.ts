@@ -10,7 +10,7 @@ import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
  * Factory for creating GpuEngine instances from descriptors.
  */
 export class GpuCoreFactory {
-    public async build(config: HypercubeConfig, engine: EngineDescriptor, mockDevice?: any): Promise<GpuEngine> {
+    public async build<TParams = any, TFaces = any>(config: HypercubeConfig<TParams>, engine: EngineDescriptor<TFaces>, mockDevice?: any): Promise<GpuEngine<TParams, TFaces>> {
         if (mockDevice) {
             await HypercubeGPUContext.init(mockDevice);
         } else if (!HypercubeGPUContext.isInitialized) {

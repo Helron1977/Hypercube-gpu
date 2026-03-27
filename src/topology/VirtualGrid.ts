@@ -24,6 +24,10 @@ export class VirtualGrid implements IVirtualGrid {
         );
     }
 
+    get params(): any {
+        return this.config.params;
+    }
+
     get dimensions(): Dimension3D {
         return this.config.dimensions;
     }

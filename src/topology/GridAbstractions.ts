@@ -34,8 +34,9 @@ export interface VirtualChunk {
 /**
  * Holds the virtual representation of the entire grid.
  */
-export interface IVirtualGrid {
-    readonly config: HypercubeConfig;
+export interface IVirtualGrid<TParams = any> {
+    readonly config: HypercubeConfig<TParams>;
+    readonly params: TParams;
     readonly dataContract: DataContract;
     readonly dimensions: Dimension3D;
     readonly chunkLayout: { x: number; y: number; z: number };
