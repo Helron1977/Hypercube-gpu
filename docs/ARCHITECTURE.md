@@ -49,8 +49,25 @@ While libraries like **Cannon.js** or **Rapier** focus on *Rigid Body Dynamics* 
 
 ---
 
-## 4. Scaling: Multi-Chunk & Halo Exchange
-To scale beyond a single GPU's memory limit, Hypercube implements **Halo Exchange**. Each computational chunk is surrounded by "Ghost Cells" that synchronize with their neighbors, allowing for a distributed "Virtual Grid" across massive domains.
+---
+
+## 5. Performance & Zero-Readback Philosophy
+
+The most common bottleneck in GPU computing is the **PCIe transfer** between VRAM and RAM. Hypercube is designed to eliminate this "CPU readback" (abk) whenever possible.
+
+### 5.1 Uniform Audit (Fast TDD)
+In our unit tests, we don't wait for the GPU results. Instead, we use a **Uniform Audit** strategy:
+- We mock the `GPUQueue.writeBuffer` method.
+- We verify that the `GpuDispatcher` sends the correct **Face Indices** (offsets) and **Physical Parameters** (omega, dt) to the GPU.
+- If the dispatch contract is mathematically aligned, the physics *will* be correct on the device. This allows for near-instant test suites.
+
+### 5.2 Zero-Copy Rendering (Application)
+For high-performance visualization (60 FPS), developers should never use `getFaceData()` in the main loop.
+- **Direct GPU Access** : Use `engine.buffer.gpuBuffer` directly as a `STORAGE_BUFFER` in your Three.js or custom WebGPU renderer.
+- **Compute-to-Render** : Write a WGSL kernel that converts physical state (`rho`, `u`) into visual data (`color`, `positions`) directly in VRAM.
+
+### 5.3 Asynchronous Sync
+When readback is unavoidable (UI/AI), use `syncFacesToHost(['myFace'])`. It uses `mapAsync()` to prevent freezing the main thread while the GPU finishes its task.
 
 ---
 *Hypercube GPU Framework — Integrity First — v4.7.0*

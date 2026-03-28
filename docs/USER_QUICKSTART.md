@@ -44,7 +44,26 @@ async function run() {
 }
 ```
 
-## 4. Points Clés
-- **`syncParams()`** : À utiliser pour les interactions en temps réel.
-- **`getWgslHeader()`** : Supprime le besoin de calculer les offsets mémoire à la main.
-- **64 Slots** : Le moteur supporte désormais jusqu'à 64 variables par kernel.
+## 5. Performance & Readback (ABK) ⚠️
+
+> [!CAUTION]
+> **Ne lisez pas les données à chaque frame !** L'appel à `getFaceData()` ou `syncToHost()` est extrêmement lent car il force le GPU à s'arrêter pour parler au CPU. 
+
+### La règle d'or :
+- **Pour le Rendu** : Utilisez `engine.buffer.gpuBuffer` directement dans votre moteur 3D (Zéro-Readback).
+- **Pour les Diagnostics** : Utilisez `syncFacesToHost()` de manière asynchrone et uniquement pour les faces nécessaires.
+
+```typescript
+// Exemple de synchronisation asynchrone sécurisée
+async function updateHUD() {
+    // 1. Demande de sync asynchrone (ne bloque pas le rendu)
+    await engine.syncFacesToHost(['rho']);
+    
+    // 2. Lecture des données filtrées (sans ghost cells)
+    const data = engine.getInnerFaceData('chunk_0_0_0', 'rho');
+    console.log("Densité moyenne:", data[0]);
+    
+    // 3. Replanifier (ex: toutes les secondes, pas à chaque frame)
+    setTimeout(updateHUD, 1000);
+}
+```
