@@ -21,7 +21,7 @@ describe('Generic Mother Model Integration', () => {
         createCommandEncoder: () => mockEncoder,
         queue: { writeBuffer: vi.fn(), submit: vi.fn() }
     };
-    HypercubeGPUContext.setDevice(mockDevice);
+    HypercubeGPUContext.setDevice(mockDevice as any);
     (HypercubeGPUContext as any)._isInitialized = true;
     (HypercubeGPUContext as any).alignToUniform = (n: number) => Math.ceil(n/256)*256;
 
@@ -40,7 +40,7 @@ describe('Generic Mother Model Integration', () => {
     const mockParity = { getFaceIndices: (n: string) => ({ read: 0, write: 1 }) } as any;
 
     it('should correctly map TensorCore parameters', async () => {
-        const dispatcher = new GpuDispatcher(vGrid as any, mockMB, mockParity);
+        const dispatcher = new GpuDispatcher(vGrid as any, mockMB, mockParity, mockDevice as any);
         
         // Mock getPipeline and refreshMetadata if needed
         (dispatcher as any).getPipeline = async () => ({ getBindGroupLayout: () => ({}) });

@@ -57,7 +57,6 @@ export class GpuEngine<TParams = any, TFaces = any> {
     public getInnerFaceData(chunkId: string, faceName: string, parity?: number): Float32Array {
         const fullData = this.getFaceData(chunkId, faceName, parity);
         const ghosts = this.vGrid.config.engine === 'test-engine' ? 1 : (this.vGrid.dataContract.descriptor.requirements.ghostCells || 0); 
-        // Note: For now we use the descriptor, but we can refine the filtering logic
         
         if (ghosts === 0) return fullData;
 
@@ -85,10 +84,10 @@ export class GpuEngine<TParams = any, TFaces = any> {
     /**
      * Resolves when the engine and its buffers are fully ready to be used.
      */
-    public async ready(): Promise<this> {
+    public async ready(): Promise<void> {
+        await HypercubeGPUContext.init();
         // Ensure initial sync of uniforms
         await this.syncParams({});
-        return this;
     }
 
     /**

@@ -41,7 +41,7 @@ export interface GridBoundaries {
     all?: BoundarySide;
 }
 
-export type FaceType = 'scalar' | 'vector' | 'population' | 'macro' | 'field' | 'mask';
+export type FaceType = 'scalar' | 'vector' | 'population' | 'macro' | 'field' | 'mask' | 'population3D';
 
 export interface EngineFace {
     name: string;

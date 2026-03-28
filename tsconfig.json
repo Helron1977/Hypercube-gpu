@@ -13,7 +13,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
-    "noEmit": true
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "noEmit": false
   },
   "include": ["src/**/*", "tests/**/*", "scripts/**/*", "env.d.ts"],
   "exclude": ["tests/renders/tensor-cp/assets/**/*"]

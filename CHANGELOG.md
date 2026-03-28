@@ -13,7 +13,8 @@ This version marks the official separation of the GPU Compute Core from the mono
 
 ### Added
 - **Generic Typings** : `GpuEngine<TParams, TFaces>` now provides full TypeScript autocompletion and type safety for simulation parameters and data faces.
-- **WGSL Header Generator (v2)** : Automatic generation of `read_NAME(x, y)` and `write_NAME(x, y, val)` macros, eliminating manual index calculations in shaders.
+- **Professional Macro Engine (v5.0)** : Automatic, high-level `read_NAME(x, y)` and `write_NAME(x, y, val)` helpers for all 64 potential faces. No more manual index math.
+- **Native 3D Logic** : Includes `getIndex3D(x, y, z)` and corresponding 3D macros (`read3D_NAME`).
 - **Simulation Builder** : Fluent API for declarative simulation setup (`SimulationBuilder`).
 - **Simulation Packs** : Pre-configured presets for LBM, Wave, Poisson, and Cellular Automata.
 - **JSON Schema** : Official schema for `HypercubeManifest` providing IDE validation and autocompletion.
@@ -22,14 +23,16 @@ This version marks the official separation of the GPU Compute Core from the mono
 - **Unified Lifecycle** : `ready()` promise ensuring GPU buffers are initialized before usage.
 
 ### Changed
-- **NPM Scoping** : Re-scoped to `@hypercube/gpu-core`.
+- **NPM Integration** : Packaged as `hypercube-gpu-core` (unscoped) for consistent registry history.
 - **Parameter Proxying** : Direct access to parameters via `engine.params`.
 - **Expanded Capacity** : Uniform slots increased from 16 to 64 to support massive 3D models.
-- **Performance Guideline** : Documentation of the **Zero-Readback** philosophy (keeping data in VRAM for rendering).
+- **Uniform Layout Shift** : Roles moved to **offset 80** to accommodate 64 faces without data corruption.
+- **Performance Guideline** : Documentation of the **Zero-Readback** philosophy (keeping data in VRAM).
 
 ### Fixed
-- Fixed memory alignment issues in uniform buffer updates.
-- Resolved ghost cell synchronization synchronization race conditions.
+- **Uniform Guard** : Fixed a critical bug where boundary roles were overwriting face indices.
+- **Type Emission** : Automatic generation of `.d.ts` definitions in `dist/src/`.
+- Resolved ghost cell synchronization race conditions.
 - Improved error messaging for buffer partitioning.
 
 ---

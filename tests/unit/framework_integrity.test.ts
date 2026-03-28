@@ -120,7 +120,7 @@ describe('Bug 2 : Pas d\'écrasement rôles/objets dans les uniforms', () => {
                 submit: () => {}
             }
         } as unknown as GPUDevice;
-        HypercubeGPUContext.setDevice(spyDevice);
+        HypercubeGPUContext.setDevice(spyDevice as any);
 
         const config: HypercubeConfig = {
             dimensions: { nx: 64, ny: 64, nz: 1 },
@@ -152,7 +152,7 @@ describe('Bug 2 : Pas d\'écrasement rôles/objets dans les uniforms', () => {
         const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 2, strideFace: 66 * 66 } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
 
-        const dispatcher = new GpuDispatcher(vGrid, buffer, parity);
+        const dispatcher = new GpuDispatcher(vGrid, buffer, parity, mockDevice as any);
         await dispatcher.dispatch(0, { 'test': 'void main() {}' });
 
         expect(capturedData).not.toBeNull();
@@ -178,7 +178,7 @@ describe('Bug 2 : Pas d\'écrasement rôles/objets dans les uniforms', () => {
 // ============================================================
 describe('Bug 3 : Taille du buffer uniforms >= taille struct Params', () => {
     it('Le buffer uniforms doit faire au moins 416 bytes (struct Params WGSL)', () => {
-        HypercubeGPUContext.setDevice(mockDevice);
+        HypercubeGPUContext.setDevice(mockDevice as any);
 
         // La struct Params WGSL :
         // 4 u32 (nx,ny,lx,ly) + 4 mixed (t,tick,stride,numFaces)
@@ -205,7 +205,7 @@ describe('Bug 3 : Taille du buffer uniforms >= taille struct Params', () => {
         const vGrid = new VirtualGrid(config, descriptor);
         const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 2, strideFace: 66 * 66 } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
-        const dispatcher = new GpuDispatcher(vGrid, buffer, parity);
+        const dispatcher = new GpuDispatcher(vGrid, buffer, parity, mockDevice as any);
         // bytesPerChunkAligned est privé, on le vérifie via la taille du staging
         // Chaque chunk a besoin de >= 416 bytes
         expect((dispatcher as unknown as { bytesPerChunkAligned: number }).bytesPerChunkAligned).toBeGreaterThanOrEqual(PARAMS_STRUCT_MIN_BYTES);
@@ -364,7 +364,7 @@ describe('Bug 5 : config.params doivent être injectés dans p0-p7', () => {
                 submit: () => {}
             }
         };
-        HypercubeGPUContext.setDevice(spyDevice);
+        HypercubeGPUContext.setDevice(spyDevice as any);
 
         const config: HypercubeConfig = {
             dimensions: { nx: 64, ny: 64, nz: 1 },
@@ -385,7 +385,7 @@ describe('Bug 5 : config.params doivent être injectés dans p0-p7', () => {
         const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 1, strideFace: 66 * 66 } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
 
-        const dispatcher = new GpuDispatcher(vGrid, buffer, parity);
+        const dispatcher = new GpuDispatcher(vGrid, buffer, parity, mockDevice as any);
         await dispatcher.dispatch(0, { 'test': 'void main() {}' });
 
         expect(capturedData).not.toBeNull();

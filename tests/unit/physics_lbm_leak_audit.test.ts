@@ -58,10 +58,10 @@ describe('SOTA Phase 9: LBM Boundary Integrity (Zero-Leakage Audit)', () => {
             dimensions: { nx: 32, ny: 32, nz: 1 },
             chunks: { x: 1, y: 1 },
             boundaries: { 
-                left: { role: 'no-slip' }, 
-                right: { role: 'no-slip' }, 
-                top: { role: 'no-slip' }, 
-                bottom: { role: 'no-slip' } 
+                left: { role: 'wall' }, 
+                right: { role: 'wall' }, 
+                top: { role: 'wall' }, 
+                bottom: { role: 'wall' } 
             },
             engine: 'lbm-leakage-audit',
             params: {}

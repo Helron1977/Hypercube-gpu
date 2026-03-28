@@ -5,13 +5,13 @@ Ce guide est destiné aux développeurs qui souhaitent intégrer le cœur GPU po
 ## 1. Installation
 
 ```bash
-npm install @hypercube/gpu-core
+npm install hypercube-gpu-core
 ```
 
 ## 2. Initialisation
 
 ```typescript
-import { HypercubeGPUContext } from '@hypercube/gpu-core';
+import { HypercubeGPUContext } from 'hypercube-gpu-core';
 
 await HypercubeGPUContext.init();
 ```
@@ -26,19 +26,26 @@ const engine = await factory.build(config, descriptor);
 
 // Boucle de calcul
 async function run() {
-    // 1. Génération automatique du Header (Indexation, Uniforms)
+    // 1. Initialisation unique
+    await engine.ready();
+
+    // 2. Génération automatique du Header (Indexation, Macros)
     const header = engine.getWgslHeader('MyRule');
     const kernels = {
-        'MyRule': header + `/* Votre code WGSL */`
+        'MyRule': header + `
+        @compute @workgroup_size(16, 16)
+        fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+            let x = id.x; let y = id.y;
+            if (x >= uniforms.nx || y >= uniforms.ny) { return; }
+            
+            // Usage des Macros Professionnelles (v5.0)
+            let val = read_Density(x, y); 
+            write_Density(x, y, val + 1.0);
+        }`
     };
     
-    // 2. Calcul principal
+    // 3. Calcul principal
     await engine.step(kernels, 1);
-    
-    // 3. Mise à jour dynamique des paramètres (Optionnel)
-    // syncParams permet de changer p0-p7 sans écraser les données du GPU
-    engine.vGrid.config.params.p0 = 1.23;
-    await engine.syncParams(kernels);
     
     requestAnimationFrame(run);
 }

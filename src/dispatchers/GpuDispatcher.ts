@@ -84,12 +84,13 @@ export class GpuDispatcher {
                 this.stagingBuffer[base + 1] = meta.vChunk.localDimensions.ny;
                 this.stagingBuffer[base + 2] = meta.vChunk.localDimensions.nx + (padding * 2);
                 this.stagingBuffer[base + 3] = meta.vChunk.localDimensions.ny + (padding * 2);
-                this.stagingBuffer[base + 32] = topo.leftRole;
-                this.stagingBuffer[base + 33] = topo.rightRole;
-                this.stagingBuffer[base + 34] = topo.topRole;
-                this.stagingBuffer[base + 35] = topo.bottomRole;
-                this.stagingBuffer[base + 36] = topo.frontRole;
-                this.stagingBuffer[base + 37] = topo.backRole;
+                this.stagingBuffer[base + 80] = topo.leftRole;
+                this.stagingBuffer[base + 81] = topo.rightRole;
+                this.stagingBuffer[base + 82] = topo.topRole;
+                this.stagingBuffer[base + 83] = topo.bottomRole;
+                this.stagingBuffer[base + 84] = topo.frontRole;
+                this.stagingBuffer[base + 85] = topo.backRole;
+                this.stagingBuffer[base + 86] = padding;
             }
         }
     }
@@ -278,34 +279,59 @@ export class GpuDispatcher {
         header += `  t: f32, tick: u32, strideFace: u32, numFaces: u32,\n`;
         header += `  p0: f32, p1: f32, p2: f32, p3: f32,\n`;
         header += `  p4: f32, p5: f32, p6: f32, p7: f32,\n`;
-        header += `  faces: array<u32, 64>\n`;
+        header += `  faces: array<u32, 64>,\n`;
+        header += `  leftRole: u32, rightRole: u32, topRole: u32, bottomRole: u32, frontRole: u32, backRole: u32,\n`;
+        header += `  ghosts: u32,\n`;
+        header += `  reserved: u32\n`;
         header += `};\n\n`;
         header += `@group(0) @binding(0) var<storage, read_write> data: array<f32>;\n`;
         header += `@group(0) @binding(1) var<uniform> uniforms: HypercubeUniforms;\n\n`;
         
-        // Add face-specific constants
+        // Face-specific helper functions (Macros)
         for (let f = 0; f < 64; f++) {
-            let faceName = "";
+            let faceNameWithSuffix = "";
             if (f < explicitFaces.length) {
-                faceName = explicitFaces[f];
+                faceNameWithSuffix = explicitFaces[f];
             } else if (f < faceMappings.length && explicitFaces.length === 0) {
-                faceName = faceMappings[f].name;
+                faceNameWithSuffix = faceMappings[f].name;
             }
             
-            if (faceName) {
-                let cleanName = faceName.replace('.', '_');
-                if (faceName.endsWith('.read')) cleanName = faceName.replace('.read', '_Read');
-                if (faceName.endsWith('.write')) cleanName = faceName.replace('.write', '_Write');
-
-                header += `const ${cleanName}: u32 = uniforms.faces[${f}];\n`;
+            if (faceNameWithSuffix) {
+                const faceName = faceNameWithSuffix.replace('.read', '').replace('.write', '');
+                const m = faceMappings.find(fm => fm.name === faceName);
                 
-                // Add helper functions for read/write
-                header += `fn read_${cleanName}(x: u32, y: u32) -> f32 { return data[${cleanName} * uniforms.strideFace + getIndex(x, y)]; }\n`;
-                header += `fn write_${cleanName}(x: u32, y: u32, val: f32) { data[${cleanName} * uniforms.strideFace + getIndex(x, y)] = val; }\n`;
+                const idxMacro = `getIndex(u32(x), u32(y))`;
+                const idxMacro3D = `getIndex3D(u32(x), u32(y), u32(z))`;
+                
+                const suffix = faceNameWithSuffix.includes('.') ? faceNameWithSuffix.split('.')[1] : "";
+                const normalizedName = suffix ? faceName + "_" + (suffix.charAt(0).toUpperCase() + suffix.slice(1)) : faceName;
+
+                // 2D Helpers
+                header += `fn read_${normalizedName}(x: u32, y: u32) -> f32 { return data[uniforms.faces[${f}] * uniforms.strideFace + ${idxMacro}]; }\n`;
+                header += `fn write_${normalizedName}(x: u32, y: u32, val: f32) { data[uniforms.faces[${f}] * uniforms.strideFace + ${idxMacro}] = val; }\n`;
+
+                // 3D Helpers
+                header += `fn read3D_${normalizedName}(x: u32, y: u32, z: u32) -> f32 { return data[uniforms.faces[${f}] * uniforms.strideFace + ${idxMacro3D}]; }\n`;
+                header += `fn write3D_${normalizedName}(x: u32, y: u32, z: u32, val: f32) { data[uniforms.faces[${f}] * uniforms.strideFace + ${idxMacro3D}] = val; }\n`;
+                
+                if (m?.isPingPong && !suffix) {
+                    header += `fn read_${faceName}_Read(x: u32, y: u32) -> f32 { return read_${faceName}(x, y); }\n`;
+                    header += `fn write_${faceName}_Write(x: u32, y: u32, val: f32) { write_${faceName}(x, y, val); }\n`;
+                    header += `fn read3D_${faceName}_Read(x: u32, y: u32, z: u32) -> f32 { return read3D_${faceName}(x, y, z); }\n`;
+                    header += `fn write3D_${faceName}_Write(x: u32, y: u32, z: u32, val: f32) { write3D_${faceName}(x, y, z, val); }\n`;
+                }
             }
         }
 
-        header += `\nfn getIndex(x: u32, y: u32) -> u32 { return y * uniforms.strideRow + x; }\n`;
+        header += `\nfn getIndex(x: u32, y: u32) -> u32 { \n`;
+        header += `  return (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts);\n`;
+        header += `}\n`;
+
+        header += `\nfn getIndex3D(x: u32, y: u32, z: u32) -> u32 { \n`;
+        header += `  let ly = uniforms.physicalNy;\n`;
+        header += `  return (z + uniforms.ghosts) * uniforms.strideRow * ly + (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts);\n`;
+        header += `}\n`;
+
         return header;
     }
 

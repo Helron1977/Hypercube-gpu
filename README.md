@@ -6,8 +6,9 @@ A deterministic, high-concurrency architecture designed for Lattice Boltzmann (L
 ## Technical Specifications
 - **Synchronous MasterBuffer Layout**: Host-mirrored VRAM partitioning for low-latency state synchronization.
 - **Batched Command Orchestration**: Minimal command encoder overhead via consolidated rule dispatching.
-- **Zero-Stall Pipeline**: Asynchronous uniform updates and compute passes.
-- **Scientific Kernel Registry**: Native implementations for Navier-Stokes (LBM D2Q9/D3Q19) and Wave Equations (FDTD).
+- **Zero-Stall Pipeline** : Asynchronous uniform updates and multi-rule compute passes.
+- **Professional Macro Engine (v5.0)** : Automated WGSL `read_NAME(x, y)` and `write_NAME(x, y, val)` helpers for all 64 potential data faces.
+- **Scientific Kernel Registry** : Native implementations for Navier-Stokes (Lattice Boltzmann) and Wave Equations (FDTD).
 
 ## Numerical Validation
 - **Spatial Order**: Verified second-order spatial convergence ($O(\Delta x^2)$) via Taylor-Green Vortex (TGV) study.
@@ -69,12 +70,15 @@ const engine = await factory.build(config, descriptor);
 
 // 3. Execution Loop
 async function loop() {
-    await engine.step(1, { 
-        'lbm-ocean': oceanWgslSource 
-    });
+    await engine.ready(); // Ensure buffers are ready
+    
+    const header = engine.getWgslHeader('lbm-ocean');
+    await engine.step({ 
+        'lbm-ocean': header + oceanWgslSource 
+    }, 1);
     
     // Optional: Synchronize specific data for HUD/Viz
-    await engine.buffer.syncFacesToHost(['rho', 'vx']);
+    await engine.syncFacesToHost(['rho', 'vx']);
     
     requestAnimationFrame(loop);
 }

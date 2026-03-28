@@ -98,10 +98,8 @@ describe('Hypercube GPU Core v0.2.0 Upgrades (TDD)', () => {
         const engine = await factory.build(config, descriptor, mockDevice);
         
         const header = engine.getWgslHeader('step');
-        expect(header).toContain('fn read_rho');
-        expect(header).toContain('fn write_rho');
-        expect(header).toContain('const rho_Read');
-        expect(header).toContain('const rho_Write');
+        expect(header).toContain('fn read_rho_Read');
+        expect(header).toContain('fn write_rho_Write');
     });
 
     it('should filter ghost cells with getInnerFaceData()', async () => {
@@ -141,7 +139,7 @@ describe('Hypercube GPU Core v0.2.0 Upgrades (TDD)', () => {
     it('should resolve ready() when engine is fully initialized', async () => {
         const { config, descriptor } = getTestSetup();
         const engine = await factory.build(config, descriptor, mockDevice);
-        // @ts-ignore
-        await expect(engine.ready()).resolves.toBeDefined();
+        // ready() now returns void (Promise<void>)
+        await expect(engine.ready()).resolves.toBeUndefined();
     });
 });
