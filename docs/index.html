@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypercube GPU Core — DX Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+:root {
+  --font-sans: 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --background: #050505;
+  --accent: #00ffb4;
+  --accent-soft: rgba(0, 255, 180, 0.1);
+  --border: #1a1a1a;
+  --text-primary: #ffffff;
+  --text-secondary: #888888;
+  --text-dim: #555555;
+  --color-success: #00ffb4;
+  --color-warning: #ffab00;
+  --color-danger: #ff4757;
+  --border-radius-md: 4px;
+  --border-radius-lg: 8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { 
+  font-family: var(--font-sans); 
+  background: var(--background); 
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+.wrap { padding: 0 0 5rem 0; max-width: 1000px; margin: 0 auto; background: var(--background); }
+
+.step-nav { 
+  display: flex; gap: 8px; flex-wrap: wrap; 
+  padding: 2rem; background: #000; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.sn { 
+  padding: 8px 16px; border: 1px solid var(--border); border-radius: 4px; 
+  font-size: 12px; cursor: pointer; background: transparent; 
+  color: var(--text-secondary); transition: all .2s; 
+  font-family: var(--font-mono); font-weight: 500; text-transform: uppercase;
+}
+.sn:hover { border-color: var(--accent); color: var(--accent); }
+.sn.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+.panel { display: none; padding: 3rem 2rem; animation: fadeIn 0.3s ease-out; }
+.panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+h2 { font-family: var(--font-mono); font-size: 24px; font-weight: 700; margin-bottom: 24px; letter-spacing: -0.02em; color: var(--accent); text-transform: uppercase; }
+h3 { font-family: var(--font-mono); font-size: 14px; font-weight: 700; margin: 2.5rem 0 1rem; color: var(--text-primary); border-left: 2px solid var(--accent); padding-left: 12px; letter-spacing: 0.1em; }
+p { font-size: 15px; color: var(--text-secondary); margin-bottom: 1.5rem; }
+
+pre { background: #000; border: 1px solid var(--border); border-radius: var(--border-radius-md); padding: 1.5rem; font-size: 13px; font-family: var(--font-mono); overflow-x: auto; line-height: 1.6; margin: 1.5rem 0; color: #ccc; position: relative; }
+pre::before { content: 'SYSTEM:SOURCE'; position: absolute; top: 0; right: 1rem; font-size: 9px; color: var(--text-dim); padding: 4px 8px; font-weight: 700; letter-spacing: 0.1em; }
+code { font-family: var(--font-mono); font-size: 13px; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 2px; color: var(--accent); }
+
+.card { background: #0a0a0a; border: 1px solid var(--border); border-radius: var(--border-radius-md); padding: 2rem; margin: 1.5rem 0; }
+.face-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid #151515; font-size: 14px; }
+.macro-box { background: #000; border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 1rem; margin: 0.75rem 0; font-size: 13px; font-family: var(--font-mono); color: var(--text-primary); }
+.macro-box span { color: var(--text-dim); font-family: var(--font-sans); font-size: 11px; display: block; margin-top: 6px; }
+
+.warn { border: 1px solid #3d2b00; background: rgba(255, 171, 0, 0.05); padding: 1.5rem; color: #ffab00; border-radius: 4px; margin: 1.5rem 0; font-size: 14px; }
+.tip { border: 1px solid #003d2b; background: rgba(0, 255, 180, 0.05); padding: 1.5rem; color: var(--accent); border-radius: 4px; margin: 1.5rem 0; font-size: 14px; }
+
+/* RECOVERY: SCIENTIFIC HEADER */
+.scientific-header {
+    height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #000; position: relative; overflow: hidden; border-bottom: 2px solid var(--accent); font-family: var(--font-mono);
+}
+.monitor-overlay {
+    position: absolute; inset: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%) 0% 0% / 100% 4px, linear-gradient(90deg, rgba(255, 255, 255, 0.02), rgba(0, 255, 180, 0.01), rgba(0, 0, 0, 0.05)) 0% 0% / 4px 100%; pointer-events: none; z-index: 10;
+}
+.hero-video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: #000; }
+.hero-video { width: 100%; height: 100%; object-fit: contain; filter: brightness(0.8) contrast(1.1); }
+.hero-content { position: relative; z-index: 20; display: flex; flex-direction: column; align-items: center; }
+.hero-title { font-size: 48px; letter-spacing: 0.5em; border: 1px solid var(--accent); padding: 20px 40px; background: var(--accent-soft); color: var(--accent); text-shadow: 0 0 15px rgba(0, 255, 180, 0.4); margin: 0; }
+.tagline { font-size: 14px; color: var(--accent); font-weight: 700; letter-spacing: 0.4em; text-transform: uppercase; margin-top: 20px; }
+
+.tab{padding:12px 20px;font-size:14px;cursor:pointer;color:var(--text-secondary);border-bottom:2px solid transparent;transition:all 0.2s;font-weight:500}
+.tab.on{color:var(--text-primary);border-bottom-color:var(--text-primary)}
+    </style>
+</head>
+<body>
+
+<header class="scientific-header">
+    <div class="monitor-overlay"></div>
+    <div class="hero-video-container">
+        <video autoplay loop muted playsinline class="hero-video">
+            <source src="assets/Animation_D_Tesseract.mp4" type="video/mp4">
+        </video>
+    </div>
+    <div class="hero-content">
+        <h1 class="hero-title">HYPERCUBE</h1>
+        <div class="tagline">Universal Registry</div>
+    </div>
+</header>
+
+<div class="wrap">
+<div class="step-nav">
+  <button class="sn active" onclick="go(0)">1 · Architecture</button>
+  <button class="sn" onclick="go(1)">2 · Manifest JSON</button>
+  <button class="sn" onclick="go(2)">3 · Memory (Faces)</button>
+  <button class="sn" onclick="go(3)">4 · WGSL Macros</button>
+  <button class="sn" onclick="go(4)">5 · Diagnostic</button>
+  <button class="sn" onclick="go(5)">6 · Audit Core</button>
+</div>
+
+<!-- PANEL 0 : vue d'ensemble -->
+<div class="panel active" id="p0">
+<h2>Architecture & Flux de Données</h2>
+<p>Le Core d'Hypercube suit un pipeline déterministe pour garantir une performance maximale en VRAM.</p>
+
+<div class="flow" style="display:flex;flex-direction:column;gap:12px;margin:2rem 0">
+  <div class="card" style="padding:1rem;margin:0">
+    <strong style="color:var(--accent)">1. Manifest JSON</strong><br>
+    <span style="font-size:13px;color:var(--text-secondary)">Déclaration de la mémoire (Faces), de la physique (Rules) et de la topologie (Grid).</span>
+  </div>
+  <div class="card" style="padding:1rem;margin:0">
+    <strong style="color:var(--accent)">2. createSimulation()</strong><br>
+    <span style="font-size:13px;color:var(--text-secondary)">Validation du contrat de données, allocation VRAM et compilation des kernels.</span>
+  </div>
+  <div class="card" style="padding:1rem;margin:0">
+    <strong style="color:var(--accent)">3. engine.step()</strong><br>
+    <span style="font-size:13px;color:var(--text-secondary)">Exécution des Compute Shaders. Le Dispatcher gère automatiquement la parité et les offsets.</span>
+  </div>
+</div>
+
+<div class="tip">Zéro Readback : La donnée ne quitte jamais la VRAM pendant la simulation.</div>
+
+<h3>Composants Fondamentaux</h3>
+<div class="card">
+  <div class="face-row"><code>GpuDispatcher</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Moteur de génération de macros WGSL et gestionnaire de dispatch.</span></div>
+  <div class="face-row"><code>DataContract</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Garant de l'intégrité de la mémoire et du mapping des faces.</span></div>
+  <div class="face-row"><code>VirtualGrid</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Abstraction topologique (2D/3D) découpée en Chunks physiques.</span></div>
+</div>
+</div>
+
+
+<!-- PANEL 1 : manifest JSON -->
+<div class="panel" id="p1">
+<h2>Le Manifest JSON</h2>
+<p>Le manifest a <strong>deux blocs</strong> de premier niveau. Beaucoup de confusion vient du fait qu'on les confond.</p>
+
+<div class="tab-row">
+  <div class="tab on" onclick="switchTab(this,'t-full')">JSON complet annoté</div>
+  <div class="tab" onclick="switchTab(this,'t-builder')">Via SimulationBuilder</div>
+  <div class="tab" onclick="switchTab(this,'t-pack')">Via SimulationPacks</div>
+</div>
+
+<div class="tab-content on" id="t-full">
+<pre>{
+  "name": "Core Simulation Baseline",
+  "version": "5.0.2",
+
+  "engine": {
+    "name": "UniversalEngine",
+    "version": "1.0.0",
+
+    "faces": [
+      { "name": "phi",  "type": "field",      "isPingPong": true },
+      { "name": "f",    "type": "population", "numComponents": 9 },
+      { "name": "obs",  "type": "mask",       "isReadOnly": true }
+    ],
+
+    <span style="color:#888">// Physique : quels kernels WGSL tourner à chaque step</span>
+    "<span class="hl4">rules</span>": [
+      { "type": "collision", "source": "" }
+    ],
+
+    "requirements": {
+      "ghostCells": 1,   <span style="color:#888">// 1 pour LBM/Wave, 0 pour cellulaire</span>
+      "pingPong": true   <span style="color:#888">// double-buffer automatique</span>
+    }
+  },
+
+  <span style="color:#888">// BLOC 2 : la topologie — où et comment</span>
+  "<span class="hl">config</span>": {
+    "dimensions": { "nx": 256, "ny": 128, "nz": 1 },
+    "chunks":     { "x": 4,   "y": 2,   "z": 1  },
+    "engine": "UniversalEngine",  <span style="color:#888">// doit matcher engine.name</span>
+    "boundaries": {
+      "left":   { "role": "inflow",   "value": 0.1 },
+      "right":  { "role": "outflow" },
+      "top":    { "role": "wall" },
+      "bottom": { "role": "wall" }
+    },
+    "params": {
+      "tau": 0.55,   <span style="color:#888">// p0 dans le WGSL</span>
+      "ux0": 0.08    <span style="color:#888">// p1 dans le WGSL</span>
+    }
+  }
+}</pre>
+</div>
+
+<div class="tab-content" id="t-builder">
+<pre><span style="color:#888">// Même résultat, sans écrire le JSON à la main</span>
+import { SimulationBuilder, createSimulation } from 'hypercube-gpu-core';
+
+const manifest = new SimulationBuilder('Universal Core')
+  .withDimensions(256, 128)
+  .withChunks(4, 2)
+  .withEngineName('UniversalEngine')
+  .withGhostCells(1)
+  .addFace('phi', 'field', true)
+  .addFace('f',   'population', 9)
+  .addFace('obs', 'mask', true)
+  .addRule('collision', lbmKernelSource)
+  .withParams({ tau: 0.55, ux0: 0.08 })
+  .build();
+
+const engine = await createSimulation(manifest);</pre>
+</div>
+
+<div class="tab-content" id="t-pack">
+<pre><span style="color:#888">// Preset prêt à l'emploi pour LBM D2Q9</span>
+import { SimulationPacks, createSimulation } from 'hypercube-gpu-core';
+
+const config = {
+  dimensions: { nx: 256, ny: 128, nz: 1 },
+  chunks:     { x: 4,   y: 2,   z: 1   },
+  engine:     'UniversalEngine',
+  boundaries: {
+    left:  { role: 'inflow',  value: 0.1 },
+    right: { role: 'outflow' },
+    top:   { role: 'wall' },
+    bottom:{ role: 'wall' }
+  },
+  params: { tau: 0.55, ux0: 0.08 }
+};
+
+const manifest = {
+  engine: SimulationPacks.LBM_D2Q9,
+  config: config
+};
+
+const engine = await createSimulation(manifest);</pre>
+<div class="tip">SimulationPacks.LBM_D2Q9, .WAVE_2D, .DIFFUSION_2D, .CELLULAR_AUTOMATA — démarrage en 3 lignes.</div>
+</div>
+
+<div class="warn">Le champ <code>config.engine</code> (string) doit être identique à <code>engine.name</code> — c'est la clé de liaison. Un mismatch est silencieux.</div>
+</div>
+
+<!-- PANEL 2 : les faces -->
+<div class="panel" id="p2">
+<h2>Les Faces — la mémoire de ta simulation</h2>
+<p>Une face = une couche de données en VRAM. Chaque cellule de la grille a une valeur par face. Clique sur un type pour voir ce qu'il génère.</p>
+
+<div class="sel-row" id="face-sel">
+  <button class="sel-btn on" onclick="showFace('scalar',this)">scalar</button>
+  <button class="sel-btn" onclick="showFace('population',this)">population</button>
+  <button class="sel-btn" onclick="showFace('field',this)">field</button>
+  <button class="sel-btn" onclick="showFace('mask',this)">mask</button>
+  <button class="sel-btn" onclick="showFace('vector',this)">vector</button>
+</div>
+
+<div id="face-detail"></div>
+
+<h3>Quand utiliser pingPong ?</h3>
+<div class="card">
+  <div class="face-row">
+    <span style="font-size:13px;min-width:100px;font-weight:500">pingPong: false</span>
+    <span style="font-size:13px;color:var(--color-text-secondary)">Donnée lue et écrite dans le même buffer. OK pour obstacles, masques, macros dérivées (rho, ux).</span>
+  </div>
+  <div class="face-row">
+    <span style="font-size:13px;min-width:100px;font-weight:500">pingPong: true</span>
+    <span style="font-size:13px;color:var(--color-text-secondary)">Double buffer auto. Le GPU lit "Now" et écrit "Next". Obligatoire quand une cellule dépend de ses voisines (LBM, wave, diffusion).</span>
+  </div>
+</div>
+
+<h3>numComponents — pour les faces multi-scalaires</h3>
+<pre>{ "name": "f", "type": "population", <span class="hl">"numComponents": 9</span> }
+<span style="color:#888">// D2Q9 → 9 directions → 9 floats par cellule
+// D3Q19 → 19 composants → "numComponents": 19
+// Omis = déduit du type : scalar=1, vector=3, population=9</span></pre>
+
+<h3>numSlots — pour le triple buffering (wave)</h3>
+<pre>{ "name": "u", "type": "field", <span class="hl">"numSlots": 3</span> }
+<span style="color:#888">// Wave du 2nd ordre : besoin de t-1, t, t+1
+// numSlots: 3 → ParityManager gère le cycle modulo 3</span></pre>
+</div>
+
+<!-- PANEL 3 : WGSL & macros -->
+<div class="panel" id="p3">
+<h2>WGSL et les macros auto-injectées</h2>
+<p>Quand tu appelles <code>engine.getWgslHeader('collision')</code>, le core injecte automatiquement des helpers pour toutes tes faces. Tu n'écris jamais d'index manuels.</p>
+
+<h3>Le header injecté — structure</h3>
+<pre><span style="color:#888">// Automatiquement injecté avant ton code :</span>
+
+struct Uniforms {
+  nx: u32,         <span style="color:#888">// colonnes (sans ghost cells)</span>
+  ny: u32,         <span style="color:#888">// lignes (sans ghost cells)</span>
+  strideRow: u32,  <span style="color:#888">// nx + 2*ghostCells</span>
+  physicalNy: u32, <span style="color:#888">// ny + 2*ghostCells</span>
+  t: u32,          <span style="color:#888">// tick courant (frame)</span>
+  tick: u32,       <span style="color:#888">// même chose (alias)</span>
+  p0..p7: f32,     <span style="color:#888">// tes params (tau=p0, ux0=p1...)</span>
+  ...
+}
+@group(0) @binding(1) var&lt;uniform&gt; uniforms: Uniforms;
+
+<span style="color:#888">// Helpers d'indexation :</span>
+fn getIndex(x: u32, y: u32) -> u32
+fn getIndex3D(x: u32, y: u32, z: u32) -> u32
+
+<span style="color:#888">// Pour chaque face déclarée — ex: face "phi" field :</span>
+fn read_phi(x: u32, y: u32) -> f32
+fn write_phi(x: u32, y: u32, val: f32)
+
+<span style="color:#888">// Pour face multi-composante — ex: face "f" population :</span>
+fn read_f(x: u32, y: u32, d: u32) -> f32
+fn write_f(x: u32, y: u32, d: u32, val: f32)</pre>
+
+<h3>Correspondance params → WGSL</h3>
+<pre><span style="color:#888">// Dans le manifest :</span>
+"params": { "tau": 0.55, "ux0": 0.08, "reynolds": 1000 }
+
+<span style="color:#888">// Dans le WGSL :</span>
+let viscosity = uniforms.p0;   <span style="color:#888">// tau → p0 (ordre de déclaration)</span>
+let velocity  = uniforms.p1;   <span style="color:#888">// ux0 → p1</span>
+let custom    = uniforms.p2;   <span style="color:#888">// reynolds → p2</span></pre>
+
+<div class="warn">Les params sont mappés par ordre dans <code>params</code>, pas par nom. <code>tau</code> est toujours <code>p0</code> parce qu'il est déclaré en premier.</div>
+
+<h3>Kernel minimal complet</h3>
+<pre>const source = engine.getWgslHeader('compute') + `
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let x = id.x; let y = id.y;
+  if (x >= uniforms.nx || y >= uniforms.ny) { return; }
+
+  // Init au tick 0
+  if (uniforms.tick == 0u) {
+    write_phi(x, y, 1.0);
+    return;
+  }
+
+  // Diffusion simple
+  let val = (read_phi(x+1, y) + read_phi(x-1, y) + read_phi(x, y+1) + read_phi(x, y-1)) * 0.25;
+  write_phi(x, y, val);
+}`;
+
+await engine.step({ 'compute': source });</pre>
+</div>
+
+<!-- PANEL 4 : lire les résultats -->
+<div class="panel" id="p4">
+<h2>Lire les résultats</h2>
+<p>Trois patterns selon ton besoin. Le premier ne coûte rien, le dernier coûte beaucoup — mais parfois nécessaire.</p>
+
+<h3>Pattern A — rendu direct (zéro coût)</h3>
+<p>Le buffer GPU est utilisé directement dans ton renderer. Aucun transfert CPU/GPU.</p>
+<pre><span style="color:#888">// Three.js : lier le buffer VRAM à un shader de rendu</span>
+const storageBuffer = engine.buffer.gpuBuffer;
+
+const bindGroup = device.createBindGroup({
+  layout: renderPipeline.getBindGroupLayout(0),
+  entries: [{ binding: 0, resource: { buffer: storageBuffer } }]
+});
+<span style="color:#888">// → ton vertex shader lit rho/ux/uy directement en VRAM</span></pre>
+
+<h3>Pattern B — sync partielle (diagnostic, UI)</h3>
+<p>Rapatrie seulement les faces nécessaires. Ne bloque pas le render loop.</p>
+<pre><span style="color:#888">// À appeler hors du render loop (setTimeout, 1×/seconde)</span>
+async function updateHUD() {
+  <span style="color:#888">// Sync seulement 'rho' — pas toute la VRAM</span>
+  await engine.syncFacesToHost(['rho']);
+
+  <span style="color:#888">// Lecture SANS ghost cells (prête à itérer)</span>
+  const rho = engine.getInnerFaceData('chunk_0_0_0', 'rho');
+
+  const avg = rho.reduce((a, b) => a + b, 0) / rho.length;
+  document.getElementById('density').textContent = avg.toFixed(4);
+}
+setTimeout(updateHUD, 1000);</pre>
+
+<h3>Pattern C — sync totale (export, debug)</h3>
+<pre><span style="color:#888">// Sync tout (lent — uniquement hors boucle)</span>
+await engine.syncToHost();
+const ux = engine.getInnerFaceData('chunk_0_0_0', 'ux');
+const uy = engine.getInnerFaceData('chunk_0_0_0', 'uy');
+
+<span style="color:#888">// Export CSV ou envoi serveur</span>
+const csv = Array.from(ux).map((v,i) => `${v},${uy[i]}`).join('\n');</pre>
+
+<h3>Réduction GPU (force, énergie totale)</h3>
+<pre><span style="color:#888">// Somme d'une face directement sur GPU — sans readback</span>
+const totalEnergy = await engine.reduceField('rho', 'chunk_0_0_0');
+
+<span style="color:#888">// Forces aérodynamiques (méthode Momentum Exchange)</span>
+const [Fx, Fy] = await engine.reduceForces('chunk_0_0_0');</pre>
+
+<h3>Trouver le chunkId</h3>
+<pre><span style="color:#888">// Convention : chunk_x_y_z (position dans la grille de chunks)</span>
+<span style="color:#888">// Grid 4×2 → chunks : chunk_0_0_0, chunk_1_0_0 ... chunk_3_1_0</span>
+<span style="color:#888">// Pour une grille 1×1 (un seul chunk) : toujours chunk_0_0_0</span>
+const data = engine.getInnerFaceData('chunk_0_0_0', 'rho');</pre>
+
+<div class="tip">Pour une simulation 256×128 en 4×2 chunks → la grille physique fait 64×64 cellules par chunk. <code>getInnerFaceData</code> te retourne un Float32Array de 64×64 = 4096 valeurs par chunk.</div>
+</div>
+
+<!-- PANEL 5 : aquarium -->
+<div class="panel" id="p5">
+<h2>Exemple complet — Universal Core</h2>
+<p>Le Core combine plusieurs systèmes qui partagent le même MasterBuffer. Voici comment le structurer.</p>
+
+<h3>Le manifest</h3>
+<pre>{
+  "name": "UniversalCore",
+  "version": "5.0.2",
+  "engine": {
+    "name": "UniversalEngine",
+    "version": "1.0.0",
+    "requirements": { "ghostCells": 1, "pingPong": true },
+    "faces": [
+      { "name": "phi",     "type": "field",      "isPingPong": true },
+      { "name": "f",       "type": "population", "numComponents": 9 },
+      { "name": "obs",     "type": "mask",       "isReadOnly": true },
+      { "name": "agents",  "type": "scalar",     "numComponents": 4 }
+    ],
+    "rules": [
+      { "type": "compute", "source": "" }
+    ]
+  },
+  "config": {
+    "dimensions": { "nx": 256, "ny": 128, "nz": 1 },
+    "chunks": { "x": 4, "y": 2, "z": 1 },
+    "engine": "UniversalEngine",
+    "boundaries": {
+      "left":   { "role": "periodic" },
+      "right":  { "role": "periodic" },
+      "top":    { "role": "wall" },
+      "bottom": { "role": "wall" }
+    },
+    "params": {
+      "tau":      0.55,
+      "ux0":      0.05,
+      "nAgents":  20
+    }
+  }
+}</pre>
+
+<h3>La boucle principale</h3>
+<pre>await engine.ready();
+
+const kernels = {
+  'compute': engine.getWgslHeader('compute') + computeSource
+};
+
+async function loop() {
+  await engine.step(kernels, 1);
+  requestAnimationFrame(loop);
+}
+loop();
+
+setInterval(async () => {
+  await engine.syncFacesToHost(['phi']);
+  const data = engine.getInnerFaceData('chunk_0_0_0', 'phi');
+  render(data);
+}, 1000);</pre>
+
+<div class="tip">Les kernels tournent séquentiellement dans le même tick GPU. Les données sont immédiatement disponibles pour les kernels suivants dans le même step.</div>
+</div>
+</div>
+
+<script>
+const panels = document.querySelectorAll('.panel');
+const navBtns = document.querySelectorAll('.sn');
+function go(i) {
+  panels.forEach((p,j) => p.classList.toggle('active', i===j));
+  navBtns.forEach((b,j) => b.classList.toggle('active', i===j));
+}
+
+function switchTab(el, id) {
+  const parent = el.closest('.panel');
+  parent.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  parent.querySelectorAll('.tab-content').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById(id).classList.add('on');
+}
+
+const faceData = {
+  scalar: {
+    label: 'scalar', color: 't-scalar',
+    desc: '1 float par cellule. Pour densité, température, masque binaire.',
+    macros: [
+      { m: 'read_phi(x, y) → f32', n: 'Automatique (Now)' },
+      { m: 'write_phi(x, y, val)', n: 'Automatique (Next)' }
+    ],
+    json: '{ "name": "phi", "type": "scalar" }'
+  },
+  population: {
+    label: 'population', color: 't-pop',
+    desc: 'Multi-composantes (ex: D2Q9). Le Dispatcher gère les offsets de plans.',
+    macros: [
+      { m: 'read_f(x, y, d) → f32', n: 'd = direction 0..N' },
+      { m: 'write_f(x, y, d, val)', n: 'Gestion plane-stride v5.0.2' },
+    ],
+    json: '{ "name": "f", "type": "population", "numComponents": 9 }'
+  },
+  field: {
+    label: 'field', color: 't-field',
+    desc: 'Conçu pour les ondes et la diffusion. Supporte nativement le triple-buffering.',
+    macros: [
+      { m: 'read_u(x, y) → f32', n: 'Logic dimension-agnostic' },
+      { m: 'write_u(x, y, val)', n: 'Parity-aware automatique' }
+    ],
+    json: '{ "name": "u", "type": "field", "isPingPong": true }'
+  },
+  mask: {
+    label: 'mask', color: 't-mask',
+    desc: 'Donnée statique ou dynamique non synchronisée (obstacles, zones).',
+    macros: [
+      { m: 'read_obs(x, y) → f32', n: '0.0 ou 1.0' },
+    ],
+    json: '{ "name": "obs", "type": "mask", "isReadOnly": true }'
+  },
+  vector: {
+    label: 'vector', color: 't-vector',
+    desc: '3 floats par cellule (x, y, z). Pour les vecteurs vitesse, gradient, etc. numComponents=3 déduit auto.',
+    macros: [
+      { m: 'read_vel(x, y, 0) → f32', n: 'composante x' },
+      { m: 'read_vel(x, y, 1) → f32', n: 'composante y' },
+      { m: 'write_vel(x, y, 2, val)', n: 'composante z' },
+    ],
+    json: '{ "name": "vel", "type": "vector", "isSynchronized": false }'
+  }
+};
+
+function showFace(type, btn) {
+  document.querySelectorAll('.sel-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const d = faceData[type];
+  document.getElementById('face-detail').innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:.75rem">
+        <span class="type-badge ${d.color}">${d.label}</span>
+        <span style="font-size:13px;color:var(--color-text-secondary)">${d.desc}</span>
+      </div>
+      <h3>Déclaration JSON</h3>
+      <pre>${d.json}</pre>
+      <h3>Macros WGSL générées</h3>
+      ${d.macros.map(m => `<div class="macro-box">${m.m}<span>${m.n}</span></div>`).join('')}
+    </div>`;
+}
+showFace('scalar', document.querySelector('.sel-btn'));
+</script>
