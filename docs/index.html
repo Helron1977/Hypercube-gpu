@@ -160,9 +160,9 @@ code { font-family: var(--font-mono); font-size: 13px; background: rgba(255,255,
     "version": "1.0.0",
 
     "faces": [
-      { "name": "phi",  "type": "field",      "isPingPong": true },
-      { "name": "f",    "type": "population", "numComponents": 9 },
-      { "name": "obs",  "type": "mask",       "isReadOnly": true }
+      { "name": "phi",  "type": "field",      "isPingPong": true, "isSynchronized": true },
+      { "name": "f",    "type": "population", "numComponents": 9, "isSynchronized": true },
+      { "name": "obs",  "type": "mask",       "isReadOnly": true, "isSynchronized": false }
     ],
 
     <span style="color:#888">// Physique : quels kernels WGSL tourner à chaque step</span>
@@ -204,9 +204,9 @@ const manifest = new SimulationBuilder('Universal Core')
   .withChunks(4, 2)
   .withEngineName('UniversalEngine')
   .withGhostCells(1)
-  .addFace('phi', 'field', true)
-  .addFace('f',   'population', 9)
-  .addFace('obs', 'mask', true)
+  .addFace('phi', 'field', true, true)
+  .addFace('f',   'population', 9, true)
+  .addFace('obs', 'mask', true, false)
   .addRule('collision', lbmKernelSource)
   .withParams({ tau: 0.55, ux0: 0.08 })
   .build();
@@ -271,13 +271,13 @@ const engine = await createSimulation(manifest);</pre>
 </div>
 
 <h3>numComponents — pour les faces multi-scalaires</h3>
-<pre>{ "name": "f", "type": "population", <span class="hl">"numComponents": 9</span> }
+<pre>{ "name": "f", "type": "population", "isSynchronized": true, <span class="hl">"numComponents": 9</span> }
 <span style="color:#888">// D2Q9 → 9 directions → 9 floats par cellule
 // D3Q19 → 19 composants → "numComponents": 19
 // Omis = déduit du type : scalar=1, vector=3, population=9</span></pre>
 
 <h3>numSlots — pour le triple buffering (wave)</h3>
-<pre>{ "name": "u", "type": "field", <span class="hl">"numSlots": 3</span> }
+<pre>{ "name": "u", "type": "field", "isSynchronized": true, <span class="hl">"numSlots": 3</span> }
 <span style="color:#888">// Wave du 2nd ordre : besoin de t-1, t, t+1
 // numSlots: 3 → ParityManager gère le cycle modulo 3</span></pre>
 </div>
@@ -417,10 +417,10 @@ const data = engine.getInnerFaceData('chunk_0_0_0', 'rho');</pre>
     "version": "1.0.0",
     "requirements": { "ghostCells": 1, "pingPong": true },
     "faces": [
-      { "name": "phi",     "type": "field",      "isPingPong": true },
-      { "name": "f",       "type": "population", "numComponents": 9 },
-      { "name": "obs",     "type": "mask",       "isReadOnly": true },
-      { "name": "agents",  "type": "scalar",     "numComponents": 4 }
+      { "name": "phi",     "type": "field",      "isPingPong": true, "isSynchronized": true },
+      { "name": "f",       "type": "population", "numComponents": 9, "isSynchronized": true },
+      { "name": "obs",     "type": "mask",       "isReadOnly": true, "isSynchronized": false },
+      { "name": "agents",  "type": "scalar",     "numComponents": 4, "isSynchronized": false }
     ],
     "rules": [
       { "type": "compute", "source": "" }
@@ -491,7 +491,7 @@ const faceData = {
       { m: 'read_phi(x, y) → f32', n: 'Automatique (Now)' },
       { m: 'write_phi(x, y, val)', n: 'Automatique (Next)' }
     ],
-    json: '{ "name": "phi", "type": "scalar" }'
+    json: '{ "name": "phi", "type": "scalar", "isSynchronized": true }'
   },
   population: {
     label: 'population', color: 't-pop',
@@ -500,7 +500,7 @@ const faceData = {
       { m: 'read_f(x, y, d) → f32', n: 'd = direction 0..N' },
       { m: 'write_f(x, y, d, val)', n: 'Gestion plane-stride v5.0.2' },
     ],
-    json: '{ "name": "f", "type": "population", "numComponents": 9 }'
+    json: '{ "name": "f", "type": "population", "numComponents": 9, "isSynchronized": true }'
   },
   field: {
     label: 'field', color: 't-field',
@@ -509,7 +509,7 @@ const faceData = {
       { m: 'read_u(x, y) → f32', n: 'Logic dimension-agnostic' },
       { m: 'write_u(x, y, val)', n: 'Parity-aware automatique' }
     ],
-    json: '{ "name": "u", "type": "field", "isPingPong": true }'
+    json: '{ "name": "u", "type": "field", "isPingPong": true, "isSynchronized": true }'
   },
   mask: {
     label: 'mask', color: 't-mask',
@@ -517,7 +517,7 @@ const faceData = {
     macros: [
       { m: 'read_obs(x, y) → f32', n: '0.0 ou 1.0' },
     ],
-    json: '{ "name": "obs", "type": "mask", "isReadOnly": true }'
+    json: '{ "name": "obs", "type": "mask", "isReadOnly": true, "isSynchronized": false }'
   },
   vector: {
     label: 'vector', color: 't-vector',

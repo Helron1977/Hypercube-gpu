@@ -17,7 +17,9 @@ describe('Generic Mother Model Integration', () => {
     const mockDevice = {
         createBuffer: () => ({ ...mockBuffer, destroy: () => {}, size: 2048 }),
         createBindGroup: () => ({}),
-        createComputePipeline: async () => ({ getBindGroupLayout: () => ({}) }),
+        createComputePipeline: () => ({ getBindGroupLayout: () => ({}) }),
+        createComputePipelineAsync: async () => ({ getBindGroupLayout: () => ({}) }),
+        createShaderModule: () => ({}),
         createCommandEncoder: () => mockEncoder,
         queue: { writeBuffer: vi.fn(), submit: vi.fn() }
     };

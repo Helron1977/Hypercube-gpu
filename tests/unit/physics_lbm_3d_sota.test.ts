@@ -12,7 +12,8 @@ describe('Physics: LBM 3D SOTA (D3Q27)', () => {
     const mockDevice = {
         createBuffer: vi.fn(() => ({ destroy: () => {}, size: 4096 })),
         createBindGroup: vi.fn(() => ({})),
-        createComputePipeline: async () => ({ getBindGroupLayout: () => ({}) }),
+        createComputePipeline: () => ({ getBindGroupLayout: () => ({}) }),
+        createComputePipelineAsync: async () => ({ getBindGroupLayout: () => ({}) }),
         createShaderModule: vi.fn(),
         queue: { writeBuffer: vi.fn(), submit: vi.fn() },
         limits: { minUniformBufferOffsetAlignment: 256 },

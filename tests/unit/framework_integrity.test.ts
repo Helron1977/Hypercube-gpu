@@ -152,7 +152,7 @@ describe('Bug 2 : Pas d\'écrasement rôles/objets dans les uniforms', () => {
         const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 2, strideFace: 66 * 66 } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
 
-        const dispatcher = new GpuDispatcher(vGrid, buffer, parity, mockDevice as any);
+        const dispatcher = new GpuDispatcher(vGrid, buffer, parity, spyDevice as any);
         await dispatcher.dispatch(0, { 'test': 'void main() {}' });
 
         expect(capturedData).not.toBeNull();
@@ -385,7 +385,7 @@ describe('Bug 5 : config.params doivent être injectés dans p0-p7', () => {
         const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 1, strideFace: 66 * 66 } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
 
-        const dispatcher = new GpuDispatcher(vGrid, buffer, parity, mockDevice as any);
+        const dispatcher = new GpuDispatcher(vGrid, buffer, parity, spyDevice as any);
         await dispatcher.dispatch(0, { 'test': 'void main() {}' });
 
         expect(capturedData).not.toBeNull();

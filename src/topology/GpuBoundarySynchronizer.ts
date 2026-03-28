@@ -8,11 +8,19 @@ import { DataContract } from '../DataContract';
  * Synchronizes boundaries on the GPU using Compute Shaders.
  */
 export class GpuBoundarySynchronizer implements IBoundarySynchronizer {
-    private device: GPUDevice;
-    private pipeline: GPUComputePipeline;
+    private device?: GPUDevice;
+    private pipeline?: GPUComputePipeline;
     private batchBuffer?: GPUBuffer;
 
-    constructor() {
+    constructor() {}
+
+    private ensureInitialized() {
+        if (this.pipeline && this.device) return;
+        
+        if (!HypercubeGPUContext.isInitialized) {
+            throw new Error("GpuBoundarySynchronizer: GPU Context not initialized. Call HypercubeGPUContext.init() first.");
+        }
+        
         this.device = HypercubeGPUContext.device;
         const wgsl = `
             struct SyncParams { srcOffset: u32, dstOffset: u32, count: u32, stride: u32 };
@@ -34,6 +42,7 @@ export class GpuBoundarySynchronizer implements IBoundarySynchronizer {
     }
 
     public syncAll(vGrid: IVirtualGrid, buffer: MasterBuffer, parityManager: ParityManager, target: 'read' | 'write'): void {
+        this.ensureInitialized();
         const gpuBuffer = buffer.gpuBuffer;
         const dataContract = vGrid.dataContract;
         const padding = dataContract.descriptor.requirements.ghostCells;
@@ -200,18 +209,18 @@ export class GpuBoundarySynchronizer implements IBoundarySynchronizer {
         const batchSize = tasks.length * 16;
         if (!this.batchBuffer || this.batchBuffer.size < batchSize) {
             if (this.batchBuffer) this.batchBuffer.destroy();
-            this.batchBuffer = this.device.createBuffer({ size: Math.ceil(batchSize/256)*256, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+            this.batchBuffer = this.device!.createBuffer({ size: Math.ceil(batchSize/256)*256, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
         }
         const data = new Uint32Array(tasks.length * 4);
         tasks.forEach((t, i) => { data[i*4+0] = t.srcOffset; data[i*4+1] = t.dstOffset; data[i*4+2] = t.count; data[i*4+3] = t.stride; });
-        this.device.queue.writeBuffer(this.batchBuffer!, 0, data);
+        this.device!.queue.writeBuffer(this.batchBuffer!, 0, data);
 
-        const encoder = this.device.createCommandEncoder();
+        const encoder = this.device!.createCommandEncoder();
         const pass = encoder.beginComputePass();
-        pass.setPipeline(this.pipeline);
-        pass.setBindGroup(0, this.device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: dataBuffer } }, { binding: 2, resource: { buffer: this.batchBuffer! } }] }));
+        pass.setPipeline(this.pipeline!);
+        pass.setBindGroup(0, this.device!.createBindGroup({ layout: this.pipeline!.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: dataBuffer } }, { binding: 2, resource: { buffer: this.batchBuffer! } }] }));
         pass.dispatchWorkgroups(Math.min(65535, tasks.length));
         pass.end();
-        this.device.queue.submit([encoder.finish()]);
+        this.device!.queue.submit([encoder.finish()]);
     }
 }

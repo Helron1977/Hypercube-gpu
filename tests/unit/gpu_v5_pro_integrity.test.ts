@@ -11,7 +11,8 @@ describe('Hypercube v5.0 Pro: WGSL Integrity Contract', () => {
     const mockDevice = {
         createBuffer: () => ({ destroy: () => {}, size: 1024 }),
         createBindGroup: () => ({}),
-        createComputePipeline: async () => ({ getBindGroupLayout: () => ({}) }),
+        createComputePipeline: () => ({ getBindGroupLayout: () => ({}) }),
+        createComputePipelineAsync: async () => ({ getBindGroupLayout: () => ({}) }),
         createShaderModule: () => ({}),
         queue: { writeBuffer: vi.fn(), submit: vi.fn() },
         limits: { minUniformBufferOffsetAlignment: 256 },
