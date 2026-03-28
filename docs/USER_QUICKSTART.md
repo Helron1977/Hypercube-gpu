@@ -19,7 +19,7 @@ await HypercubeGPUContext.init();
 ## 3. Utilisation de l'Engine
 
 ```typescript
-import { GpuCoreFactory } from '@hypercube/gpu-core';
+import { SimulationPacks, GpuCoreFactory } from 'hypercube-gpu-core';
 
 const factory = new GpuCoreFactory();
 const engine = await factory.build(config, descriptor);

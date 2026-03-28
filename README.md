@@ -52,13 +52,13 @@ See [CHANGELOG.md](./CHANGELOG.md) for full details of the **v5.0.0** Major Rele
 
 ## Installation & Usage
 ```bash
-npm install @hypercube/gpu-core 
+npm install hypercube-gpu-core 
 ```
 
 ## Usage
 
 ```typescript
-import { GpuCoreFactory, HypercubeGPUContext } from '@hypercube/gpu-core';
+import { GpuCoreFactory, HypercubeGPUContext } from 'hypercube-gpu-core';
 
 // 1. Initialize GPU Context
 await HypercubeGPUContext.init();
