@@ -103,6 +103,7 @@ export interface HypercubeConfig<TParams = any> {
     boundaries: GridBoundaries;
     engine: string;
     params: TParams;
+    maxRules?: number;
     objects?: VirtualObject[];
 }
 

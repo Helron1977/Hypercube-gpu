@@ -53,7 +53,7 @@
         import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
         const canvas = document.getElementById('c');
         const log = document.getElementById('log');
-        let engine, wgsl, running = false, fc = 0, lt = 0;
+        let engine, wgsl, lx, running = false, fc = 0, lt = 0;
         const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
 
         document.getElementById('btnStart').onclick = async () => {
@@ -63,14 +63,15 @@
             const m = await f.loadManifest('../manifests/diffusion_audit.json');
             L('[2/4] Building engine...');
             engine = await f.build(m.config, m.engine);
-            const lx = m.config.dimensions.nx + 2;
+            lx = engine.buffer.layout.strideRow;
             const cells = engine.buffer.layout.cellsPerFaceRaw;
 
             L('[3/4] Setting hot spot...');
             const t0 = new Float32Array(cells);
             const cx = 128, cy = 128, r = 20;
-            for (let y = 0; y < 258; y++) for (let x = 0; x < 258; x++) {
-                const dx = x-1-cx, dy = y-1-cy;
+            const ghosts = m.engine.requirements.ghostCells || 1;
+            for (let y = 0; y < 256 + 2*ghosts; y++) for (let x = 0; x < 256 + 2*ghosts; x++) {
+                const dx = x - ghosts - cx, dy = y - ghosts - cy;
                 if (dx*dx+dy*dy < r*r) t0[y*lx+x] = 1.0;
             }
             engine.setFaceData('chunk_0_0_0', 't', t0, true);
@@ -95,7 +96,8 @@
             const res = await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
                 mode: 'single', nx: 256, ny: 256,
                 faceIdx: engine.parityManager.getFaceIndices('t').read,
-                strideFace: engine.buffer.strideFace, scale: 1.0
+                strideFace: engine.buffer.strideFace, scale: 1.0,
+                strideRow: lx, ghosts: 1
             });
             fc++;
             if (now - lt > 500) {

@@ -1,3 +1,6 @@
+/* Standard WGSL header injected by GpuDispatcher handles bindings 0 & 1 */
+@group(0) @binding(2) var<storage, read> transfers: array<TransferParams>;
+
 struct TransferParams {
     srcBase: u32,
     dstBase: u32,
@@ -12,9 +15,6 @@ struct TransferParams {
     size1: u32,   // dimension of first orthogonal axis
     size2: u32    // dimension of second orthogonal axis
 };
-
-@group(0) @binding(0) var<storage, read_write> data: array<f32>;
-@group(0) @binding(1) var<storage, read> transfers: array<TransferParams>;
 
 @compute @workgroup_size(16, 16, 1)
 fn main(
@@ -43,8 +43,7 @@ fn main(
         dst_i = (p.dstPos * p.ly + v) * p.lx + u;
     }
     
-    // Copy all faces (rho, ux, uy, uz, type, f0...f18)
-    // For D3Q19, numFaces is 24 (1+3+1+19)
+    // Copy all faces
     for (var f = 0u; f < p.numFaces; f = f + 1u) {
         data[p.dstBase + f * p.stride + dst_i] = data[p.srcBase + f * p.stride + src_i];
     }

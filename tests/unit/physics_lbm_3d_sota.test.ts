@@ -80,14 +80,14 @@ describe('Physics: LBM 3D SOTA (D3Q27)', () => {
 
         const header = dispatcher.getWgslHeader('LBM');
 
-        // Check 3D Multi-Component Macros
-        expect(header).toContain('fn read3D_f_Now(x: u32, y: u32, z: u32, d: u32)');
-        expect(header).toContain('uniforms.faces[0] + u32(d)'); // f.now is face 0
-        expect(header).toContain('getIndex3D(x, y, z)');
+        // Check 3D Multi-Component Macros (Dimension-agnostic read_ prefix)
+        expect(header).toContain('fn read_f_Now(x: u32, y: u32, z: u32, d: u32)');
+        expect(header).toContain('(uniforms.faces[0] + u32(d)) * uniforms.strideFace'); 
+        expect(header).toContain('uniforms.physicalNy');
 
         // Check Convenience
-        expect(header).toContain('fn read3D_f_Now(x: u32, y: u32, z: u32, d: u32)');
-        expect(header).toContain('fn write3D_f_Next(x: u32, y: u32, z: u32, d: u32, val: f32)');
+        expect(header).toContain('fn read_f_Now(x: u32, y: u32, z: u32, d: u32)');
+        expect(header).toContain('fn write_f_Next(x: u32, y: u32, z: u32, d: u32, val: f32)');
     });
 
     it('GpuDispatcher: should pack Professional Roles into Uniforms', async () => {

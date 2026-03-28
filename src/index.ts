@@ -13,3 +13,5 @@ export * from './topology/TopologyResolver';
 export * from './topology/MapConstructor';
 export * from './topology/GpuBoundarySynchronizer';
 export * from './rasterization/ObjectRasterizer';
+export * from './builders/ManifestValidator';
+export * from './createSimulation';

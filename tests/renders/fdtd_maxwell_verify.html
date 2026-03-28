@@ -57,7 +57,7 @@
         import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
         const canvas = document.getElementById('c');
         const log = document.getElementById('log');
-        let engine, wgslE, wgslH, running = false, fc = 0, lt = 0;
+        let engine, wgslE, wgslH, lx, running = false, fc = 0, lt = 0;
         const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
 
         document.getElementById('btnStart').onclick = async () => {
@@ -67,6 +67,7 @@
             const m = await f.loadManifest('../manifests/fdtd_audit.json');
             L('[2/3] Building engine...');
             engine = await f.build(m.config, m.engine);
+            lx = engine.buffer.layout.strideRow;
             L('[3/3] Loading kernels (E + H)...');
             wgslE = await (await fetch('/src/kernels/wgsl/FdtdUpdateE.wgsl')).text();
             wgslH = await (await fetch('/src/kernels/wgsl/FdtdUpdateH.wgsl')).text();
@@ -95,7 +96,8 @@
             await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
                 mode: 'bipolar', nx: 128, ny: 128,
                 faceIdx: faceIdx,
-                strideFace: engine.buffer.strideFace, scale: 200.0
+                strideFace: engine.buffer.strideFace, scale: 200.0,
+                strideRow: lx, ghosts: 1
             });
             fc++;
             if (now - lt > 500) {

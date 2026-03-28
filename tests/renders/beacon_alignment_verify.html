@@ -17,25 +17,17 @@
 
                 const NX = 512, NY = 128;
                 const BEACON_WGSL = `
-                struct Params {
-                    nx: u32, ny: u32, lx: u32, ly: u32,
-                    t: f32, tick: u32, strideFace: u32, numFaces: u32,
-                    p0: f32, p1: f32, p2: f32, p3: f32, p4: f32, p5: f32, p6: f32, p7: f32,
-                    f0: u32, f1: u32, f2: u32, f3: u32, f4: u32, f5: u32
-                };
-                @group(0) @binding(0) var<storage, read_write> data: array<f32>;
-                @group(0) @binding(1) var<uniform> params: Params;
-
+                // Redefinition struct Params removed - using inherited uniforms
                 @compute @workgroup_size(16, 16)
                 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-                    if (id.x >= params.nx || id.y >= params.ny) { return; }
+                    if (id.x >= uniforms.nx || id.y >= uniforms.ny) { return; }
                     let px = id.x + 1u; let py = id.y + 1u;
-                    let i = py * params.lx + px;
+                    let i = py * uniforms.strideRow + px;
                     
                     // INJECT BEACON EVERY 100 PIXELS
                     if (i % 100u == 0u) {
                         let marker = 1000000.0 + f32(i);
-                        data[params.f4 * params.strideFace + i] = marker; 
+                        data[uniforms.faces[4] * uniforms.strideFace + i] = marker; 
                     }
                 }
                 `;

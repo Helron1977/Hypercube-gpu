@@ -1,10 +1,13 @@
-# Changelog — Hypercube GPU Core
+## [5.0.2] - 2026-03-28
 
-All notable changes to this project will be documented in this file.
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### 🛡️ Enterprise Stabilization & Macro Refactor
+This version refactors the core WGSL generation engine to provide a professional, collision-free API for complex simulations.
 
----
+### Changed
+- **Macro Engine Refactor (v5.0.2)**: Total rewrite of the internal `GpuDispatcher` header generator. Supports suffix-aware mapping (`.read`, `.write`, `.now`, `.next`) with zero-collision alias mapping.
+- **LBM Plane-Stride Support**: Native support for multi-component faces (D2Q9/D3Q19/D3Q27) using plane-based memory offsets.
+- **3D Volumetric Alignment**: Optimized `physicalNy` computation and workgroup dispatch (`8,8,4`) for high-resolution 3D grids (e.g., Mandelbulb 64³).
+- **Kernel Standardization**: Modernized all provided kernels (Diffusion, Life, FDTD) to use high-level macros consistently, ensuring they are layout-agnostic and robust to memory shifts.
 
 ## [5.0.1] - 2026-03-28
 

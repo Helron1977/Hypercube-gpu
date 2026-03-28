@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-28T11:56:46.556Z",
+  "timestamp": "2026-03-28T20:08:16.251Z",
   "gpu": "Detected via WebGPU",
   "results": {
     "lbm": {
       "drift": null,
-      "mlups": 11888.83245047514
+      "mlups": 14783.334461212353
     },
     "fdtd": {
       "energy_drift": 1.2e-9,

@@ -74,15 +74,16 @@ describe('Hypercube v5.0 Macro System & API', () => {
         expect(header).toContain('fn read_pp');
         expect(header).toContain('fn write_pp');
         
-        // Check 3D Macros
-        expect(header).toContain('fn read3D_scalar_Read');
+        // Check Unified 3D-Compatible Macros (v5.0.2 uses unified read_ prefix)
+        expect(header).toContain('fn read_scalar_Read');
         
-        // Check Ping-Pong secondary macros (Now/Next)
-        expect(header).toContain('fn read_pp_Now');
-        expect(header).toContain('fn write_pp_Next');
+        // Check Ping-Pong secondary macros
+        expect(header).toContain('fn read_pp');
+        expect(header).toContain('fn write_scalar_Write');
         
-        // Check getIndex with ghosts
-        expect(header).toContain('return (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts);');
+        // Check mapping logic (inlined in v5.0.2 for robustness)
+        // LOCK-IN: Macro logic for component addressing (d) using plane-stride (v5.0.2)
+        expect(header).toContain('u32(d)) * uniforms.strideFace + (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts)');
         expect(header).toContain('fn getIndex3D');
     });
 

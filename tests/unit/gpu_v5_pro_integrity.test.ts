@@ -97,7 +97,8 @@ describe('Hypercube v5.0 Pro: WGSL Integrity Contract', () => {
         const header = dispatcher.getWgslHeader('LBM');
 
         // LOCK-IN: Macro logic for component addressing (d)
-        expect(header).toContain('data[(uniforms.faces[0] + u32(d)) * uniforms.strideFace + getIndex(x, y)]');
+        // LOCK-IN: Macro logic for component addressing (d) using plane-stride (v5.0.2)
+        expect(header).toContain('uniforms.faces[0] + u32(d)) * uniforms.strideFace + (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts)');
     });
 
     it('CONTRACT: must prepend WGSL header to kernel source before compilation', async () => {

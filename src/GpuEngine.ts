@@ -8,6 +8,8 @@ import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
  * High-level wrapper for a Hypercube GPU simulation.
  */
 export class GpuEngine<TParams = any, TFaces = any> {
+    private bufferPool: Map<string, Float32Array> = new Map();
+
     constructor(
         public readonly vGrid: IVirtualGrid<TParams>,
         public readonly buffer: MasterBuffer,
@@ -65,7 +67,14 @@ export class GpuEngine<TParams = any, TFaces = any> {
         const ly = ny + (ghosts * 2);
         const lz = nz > 1 ? nz + (ghosts * 2) : 1;
         
-        const innerData = new Float32Array(nx * ny * lz);
+        const poolKey = `${chunkId}:${faceName}:${nx}:${ny}:${lz}`;
+        let innerData = this.bufferPool.get(poolKey);
+        
+        if (!innerData || innerData.length !== nx * ny * lz) {
+            innerData = new Float32Array(nx * ny * lz);
+            this.bufferPool.set(poolKey, innerData);
+        }
+        
         let destIdx = 0;
         
         for (let z = 0; z < lz; z++) {
@@ -79,6 +88,12 @@ export class GpuEngine<TParams = any, TFaces = any> {
         }
         
         return innerData;
+    }
+
+    public destroy(): void {
+        this.buffer.destroy();
+        this.dispatcher.destroy();
+        this.bufferPool.clear();
     }
 
     /**

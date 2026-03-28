@@ -22,17 +22,16 @@ interface ChunkDispatchMetadata {
  */
 export class GpuDispatcher {
     public device: GPUDevice;
-    public pipelines: Map<string, GPUComputePipeline> = new Map();
-    public uniformBuffer?: GPUBuffer;
-    public reductionBuffer?: GPUBuffer;
-    public forceResultsBuffer?: GPUBuffer;
-    public forceResultsStaging?: GPUBuffer;
-    public haloTransferBuffer?: GPUBuffer;
+    private pipelines: Map<string, GPUComputePipeline> = new Map();
+    private uniformBuffer?: GPUBuffer;
+    private reductionBuffer?: GPUBuffer;
+    private forceResultsBuffer?: GPUBuffer;
+    private forceResultsStaging?: GPUBuffer;
+    private haloTransferBuffer?: GPUBuffer;
     private topologyResolver: TopologyResolver = new TopologyResolver();
     private bindGroupCache: Map<string, GPUBindGroup> = new Map();
     private dispatchMetadata: ChunkDispatchMetadata[] = [];
     private bytesPerChunkAligned: number = 0;
-    private MAX_RULES = 8;
     private stagingBuffer?: Uint32Array;
 
     constructor(
@@ -57,12 +56,13 @@ export class GpuDispatcher {
     private refreshMetadata(): void {
         const strideFace = this.buffer.strideFace;
         const totalSlots = this.buffer.totalSlotsPerChunk;
+        const maxRules = this.vGrid.config?.maxRules || 8;
 
         this.dispatchMetadata = this.vGrid.chunks.map((vChunk, i) => {
             const gid = vChunk.y * this.vGrid.chunkLayout.x + vChunk.x;
             return {
                 vChunk,
-                uniformOffset: i * this.MAX_RULES * this.bytesPerChunkAligned,
+                uniformOffset: i * maxRules * this.bytesPerChunkAligned,
                 dataOffset: gid * totalSlots * strideFace * 4,
                 dataSize: totalSlots * strideFace * 4,
                 globalIdx: gid,
@@ -70,7 +70,7 @@ export class GpuDispatcher {
             };
         });
 
-        const totalUniformSize = this.vGrid.chunks.length * this.MAX_RULES * this.bytesPerChunkAligned;
+        const totalUniformSize = this.vGrid.chunks.length * maxRules * this.bytesPerChunkAligned;
         this.stagingBuffer = new Uint32Array(totalUniformSize / 4);
 
         for (let i = 0; i < this.dispatchMetadata.length; i++) {
@@ -78,19 +78,29 @@ export class GpuDispatcher {
             const padding = this.vGrid.dataContract.descriptor.requirements.ghostCells || 0;
             const topo = meta.topology;
 
-            for (let r = 0; r < this.MAX_RULES; r++) {
-                const base = (i * this.MAX_RULES + r) * (this.bytesPerChunkAligned / 4);
+            for (let r = 0; r < maxRules; r++) {
+                const base = (i * maxRules + r) * (this.bytesPerChunkAligned / 4);
+                
+                // Use GLOBAL layout values for strideRow and physicalNy to avoid tilts on multi-chunk grids
+                const layoutStrideRow = this.buffer.layout?.strideRow || (meta.vChunk.localDimensions.nx + (padding * 2));
+                const strideFace = this.buffer.layout?.strideFace || (this.buffer as any).strideFace || (layoutStrideRow * (meta.vChunk.localDimensions.ny + (padding * 2)));
+                const layoutPhysicalNy = strideFace / layoutStrideRow; 
+
                 this.stagingBuffer[base + 0] = meta.vChunk.localDimensions.nx;
                 this.stagingBuffer[base + 1] = meta.vChunk.localDimensions.ny;
-                this.stagingBuffer[base + 2] = meta.vChunk.localDimensions.nx + (padding * 2);
-                this.stagingBuffer[base + 3] = meta.vChunk.localDimensions.ny + (padding * 2);
-                this.stagingBuffer[base + 80] = topo.leftRole;
-                this.stagingBuffer[base + 81] = topo.rightRole;
-                this.stagingBuffer[base + 82] = topo.topRole;
-                this.stagingBuffer[base + 83] = topo.bottomRole;
-                this.stagingBuffer[base + 84] = topo.frontRole;
-                this.stagingBuffer[base + 85] = topo.backRole;
-                this.stagingBuffer[base + 86] = padding;
+                this.stagingBuffer[base + 2] = layoutStrideRow;
+                this.stagingBuffer[base + 3] = Math.floor(layoutPhysicalNy);
+                
+                // Index 80 is GHOSTS in WGSL struct
+                this.stagingBuffer[base + 80] = padding;
+                
+                // Index 81-86 is ROLES in WGSL struct
+                this.stagingBuffer[base + 81] = topo.leftRole;
+                this.stagingBuffer[base + 82] = topo.rightRole;
+                this.stagingBuffer[base + 83] = topo.topRole;
+                this.stagingBuffer[base + 84] = topo.bottomRole;
+                this.stagingBuffer[base + 85] = topo.frontRole;
+                this.stagingBuffer[base + 86] = topo.backRole;
             }
         }
     }
@@ -103,7 +113,8 @@ export class GpuDispatcher {
     }
 
     private ensureBuffers() {
-        const totalUniformSize = this.vGrid.chunks.length * this.MAX_RULES * this.bytesPerChunkAligned;
+        const maxRules = this.vGrid.config?.maxRules || 8;
+        const totalUniformSize = this.vGrid.chunks.length * maxRules * this.bytesPerChunkAligned;
         if (!this.uniformBuffer || this.uniformBuffer.size < totalUniformSize) {
             if (this.uniformBuffer) this.uniformBuffer.destroy();
             this.uniformBuffer = this.device.createBuffer({
@@ -137,20 +148,26 @@ export class GpuDispatcher {
         const activePipelines = await Promise.all(pipelinePromises);
 
         // 2. Remplissage complet du staging buffer uniform (Multi-Rule)
+        const maxRules = this.vGrid.config?.maxRules || 8;
         for (let rIdx = 0; rIdx < rules.length; rIdx++) {
             const scheme = rules[rIdx];
             if (!activePipelines[rIdx]) continue;
 
             for (let i = 0; i < this.dispatchMetadata.length; i++) {
-                const base = (i * this.MAX_RULES + rIdx) * (this.bytesPerChunkAligned / 4);
+                const base = (i * maxRules + rIdx) * (this.bytesPerChunkAligned / 4);
                 const dim = this.dispatchMetadata[i].vChunk.localDimensions;
                 const ghosts = descriptor.requirements.ghostCells || 0;
 
-                const strideRow = (dim.nx + (ghosts * 2));
+                // Use GLOBAL layout values for strideRow and physicalNy to avoid tilts on multi-chunk grids
+                const layoutStrideRow = this.buffer.layout?.strideRow || (dim.nx + (ghosts * 2));
+                const currentStrideFace = this.buffer.layout?.strideFace || (this.buffer as any).strideFace || (layoutStrideRow * (dim.ny + (ghosts * 2)));
+                // physicalNy = ny + 2*ghosts (NOT strideFace/strideRow, which breaks for 3D)
+                const layoutPhysicalNy = dim.ny + (ghosts * 2);
+
                 u32Data[base + 0] = dim.nx;
                 u32Data[base + 1] = dim.ny;
-                u32Data[base + 2] = strideRow;
-                u32Data[base + 3] = dim.ny + (ghosts * 2);
+                u32Data[base + 2] = layoutStrideRow;
+                u32Data[base + 3] = Math.floor(layoutPhysicalNy);
 
                 f32Data[base + 4] = t;
                 u32Data[base + 5] = this.parityManager.currentTick;
@@ -310,55 +327,58 @@ fn getIndex3D(x: u32, y: u32, z: u32) -> u32 {
 \n`;
 
         // Face-specific helper functions (Macros)
-        for (let f = 0; f < 64; f++) {
-            let faceNameWithSuffix = "";
-            if (f < explicitFaces.length) {
-                faceNameWithSuffix = explicitFaces[f];
-            } else if (f < faceMappings.length && explicitFaces.length === 0) {
-                faceNameWithSuffix = faceMappings[f].name;
-            }
+        const facesToGenerate = explicitFaces.length > 0 ? explicitFaces : faceMappings.map(fm => fm.name);
 
-            if (faceNameWithSuffix) {
-                const faceName = faceNameWithSuffix.replace('.read', '').replace('.write', '').replace('.now', '').replace('.old', '').replace('.next', '');
-                const m = faceMappings.find(fm => fm.name === faceName);
+        for (let fIdx = 0; fIdx < Math.min(facesToGenerate.length, 64); fIdx++) {
+            const rawName = facesToGenerate[fIdx];
+            const faceName = rawName.split('.')[0];
+            const suffix = rawName.includes('.') ? rawName.split('.')[1] : "";
+            const m = faceMappings.find(fm => fm.name === faceName);
+            if (!m) continue;
 
-                const suffix = faceNameWithSuffix.includes('.') ? faceNameWithSuffix.split('.')[1] : "";
+            const is3D = (this.vGrid.dimensions?.nz || 1) > 1;
+            const isMultiComp = (m.numComponents || 1) > 1;
+            const normalizedSuffix = suffix ? suffix.charAt(0).toUpperCase() + suffix.slice(1).toLowerCase() : "";
+            const macroBaseName = normalizedSuffix ? faceName + "_" + normalizedSuffix : faceName;
 
-                // Normalize suffix for macro name: Now, Old, Next, Read, Write
-                const normalizedSuffix = suffix ? suffix.charAt(0).toUpperCase() + suffix.slice(1).toLowerCase() : "";
-                const normalizedName = normalizedSuffix ? faceName + "_" + normalizedSuffix : faceName;
+            // 1. Internal Base Macros (Slot-Specific)
+            const generateBase = (id: string, f: number, slotOffset: string) => {
+                // For multi-component faces (LBM D2Q9), component d offsets by full strideFace planes
+                const faceExpr = isMultiComp ? `(uniforms.faces[${f}] + u32(d))` : `uniforms.faces[${f}]`;
+                const params2D = isMultiComp ? "x: u32, y: u32, d: u32" : "x: u32, y: u32";
+                const params3D = isMultiComp ? "x: u32, y: u32, z: u32, d: u32" : "x: u32, y: u32, z: u32";
 
-                const numComp = m?.numComponents || 1;
-                const isMulti = numComp > 1;
-                const subSlotSuffix = isMulti ? `+ u32(d)` : "";
-                const readArgs = isMulti ? `x: u32, y: u32, d: u32` : `x: u32, y: u32`;
-                const read3DArgs = isMulti ? `x: u32, y: u32, z: u32, d: u32` : `x: u32, y: u32, z: u32`;
-                const writeArgs = isMulti ? `x: u32, y: u32, d: u32, val: f32` : `x: u32, y: u32, val: f32`;
-                const write3DArgs = isMulti ? `x: u32, y: u32, z: u32, d: u32, val: f32` : `x: u32, y: u32, z: u32, val: f32`;
-                const callArgs = isMulti ? `x, y, d` : `x, y`;
-                const call3DArgs = isMulti ? `x, y, z, d` : `x, y, z`;
+                header += `fn _read2D_${id}(${params2D}) -> f32 { return data[${faceExpr} * uniforms.strideFace + (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts)]; }\n`;
+                header += `fn _write2D_${id}(${params2D}, val: f32) { data[${faceExpr} * uniforms.strideFace + (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts)] = val; }\n`;
+                header += `fn _read3D_${id}(${params3D}) -> f32 { return data[${faceExpr} * uniforms.strideFace + ((z + uniforms.ghosts) * uniforms.physicalNy + (y + uniforms.ghosts)) * uniforms.strideRow + (x + uniforms.ghosts)]; }\n`;
+                header += `fn _write3D_${id}(${params3D}, val: f32) { data[${faceExpr} * uniforms.strideFace + ((z + uniforms.ghosts) * uniforms.physicalNy + (y + uniforms.ghosts)) * uniforms.strideRow + (x + uniforms.ghosts)] = val; }\n`;
+            };
 
-                // 2D Helpers
-                header += `fn read_${normalizedName}(${readArgs}) -> f32 { return data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex(x, y)]; }\n`;
-                header += `fn write_${normalizedName}(${writeArgs}) { data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex(x, y)] = val; }\n`;
+            generateBase(macroBaseName, fIdx, "");
 
-                // 3D Helpers
-                header += `fn read3D_${normalizedName}(${read3DArgs}) -> f32 { return data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex3D(x, y, z)]; }\n`;
-                header += `fn write3D_${normalizedName}(${write3DArgs}) { data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex3D(x, y, z)] = val; }\n`;
-
-                if (m?.numSlots && m.numSlots > 1 && !suffix) {
-                    header += `fn read_${faceName}_Now(${readArgs}) -> f32 { return read_${faceName}(${callArgs}); }\n`;
-                    header += `fn write_${faceName}_Next(${writeArgs}) { write_${faceName}(${callArgs}, val); }\n`;
-
-                    // Backward Compatibility Aliases (_Read, _Write)
-                    header += `fn read_${faceName}_Read(${readArgs}) -> f32 { return read_${faceName}(${callArgs}); }\n`;
-                    header += `fn write_${faceName}_Write(${writeArgs}) { write_${faceName}(${callArgs}, val); }\n`;
-
-                    if (m.numSlots > 2) {
-                        header += `fn read_${faceName}_Old(${readArgs}) -> f32 { return data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex(x, y)]; }\n`;
-                    }
+            // 2. Public Facing Macros
+            const defineUserMacro = (alias: string, internalId: string, type: 'read' | 'write' | 'both') => {
+                const args = isMultiComp ? (is3D ? "x, y, z, d" : "x, y, d") : (is3D ? "x, y, z" : "x, y");
+                const params = isMultiComp ? (is3D ? "x: u32, y: u32, z: u32, d: u32" : "x: u32, y: u32, d: u32") : (is3D ? "x: u32, y: u32, z: u32" : "x: u32, y: u32");
+                
+                if (type === 'read' || type === 'both') {
+                    header += `fn read_${alias}(${params}) -> f32 { return ${(is3D ? `_read3D_${internalId}` : `_read2D_${internalId}`)}(${args}); }\n`;
                 }
+                if (type === 'write' || type === 'both') {
+                    header += `fn write_${alias}(${params}, val: f32) { ${(is3D ? `_write3D_${internalId}` : `_write2D_${internalId}`)}(${args}, val); }\n`;
+                }
+            };
+
+            // Main Macro for this slot
+            defineUserMacro(macroBaseName, macroBaseName, 'both');
+
+            // Compatibility Aliases: only needed when suffix makes macroBaseName differ from faceName
+            if (suffix === 'read' || suffix === 'now') {
+                defineUserMacro(faceName, macroBaseName, 'read');
+            } else if (suffix === 'write' || suffix === 'next') {
+                defineUserMacro(faceName, macroBaseName, 'write');
             }
+            // No else: when suffix is empty, macroBaseName === faceName, already defined above.
         }
 
         return header;
@@ -399,9 +419,10 @@ fn getIndex3D(x: u32, y: u32, z: u32) -> u32 {
         this.ensureBuffers();
         const faceMappings = this.vGrid.dataContract.getFaceMappings();
         const f32View = new Float32Array(this.stagingBuffer!.buffer);
+        const maxRules = this.vGrid.config?.maxRules || 8;
 
         for (let i = 0; i < this.dispatchMetadata.length; i++) {
-            const base = (i * this.MAX_RULES) * (this.bytesPerChunkAligned / 4);
+            const base = (i * maxRules) * (this.bytesPerChunkAligned / 4);
             const dim = this.dispatchMetadata[i].vChunk.localDimensions;
             const strideRow = this.buffer.layout?.strideRow || (dim.nx + 2);
             this.stagingBuffer![base + 0] = dim.nx;
@@ -532,11 +553,21 @@ fn getIndex3D(x: u32, y: u32, z: u32) -> u32 {
             layout: pipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: this.buffer.gpuBuffer } },
-                { binding: 1, resource: { buffer: this.haloTransferBuffer } }
+                { binding: 2, resource: { buffer: this.haloTransferBuffer } }
             ]
         });
         passEncoder.setBindGroup(0, bindGroup);
         passEncoder.dispatchWorkgroups(16, 16, transfers.length);
         passEncoder.end();
+    }
+
+    public destroy(): void {
+        if (this.uniformBuffer) this.uniformBuffer.destroy();
+        if (this.reductionBuffer) this.reductionBuffer.destroy();
+        if (this.forceResultsBuffer) this.forceResultsBuffer.destroy();
+        if (this.forceResultsStaging) this.forceResultsStaging.destroy();
+        if (this.haloTransferBuffer) this.haloTransferBuffer.destroy();
+        this.pipelines.clear();
+        this.bindGroupCache.clear();
     }
 }

@@ -17,7 +17,7 @@ export class GpuBoundarySynchronizer implements IBoundarySynchronizer {
         const wgsl = `
             struct SyncParams { srcOffset: u32, dstOffset: u32, count: u32, stride: u32 };
             @group(0) @binding(0) var<storage, read_write> data: array<f32>;
-            @group(0) @binding(1) var<storage, read> batch: array<SyncParams>;
+            @group(0) @binding(2) var<storage, read> batch: array<SyncParams>;
             @compute @workgroup_size(64)
             fn main(@builtin(local_invocation_id) local_id: vec3<u32>, @builtin(workgroup_id) wg_id: vec3<u32>) {
                 let p = batch[wg_id.x];
@@ -209,7 +209,7 @@ export class GpuBoundarySynchronizer implements IBoundarySynchronizer {
         const encoder = this.device.createCommandEncoder();
         const pass = encoder.beginComputePass();
         pass.setPipeline(this.pipeline);
-        pass.setBindGroup(0, this.device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: dataBuffer } }, { binding: 1, resource: { buffer: this.batchBuffer! } }] }));
+        pass.setBindGroup(0, this.device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: dataBuffer } }, { binding: 2, resource: { buffer: this.batchBuffer! } }] }));
         pass.dispatchWorkgroups(Math.min(65535, tasks.length));
         pass.end();
         this.device.queue.submit([encoder.finish()]);

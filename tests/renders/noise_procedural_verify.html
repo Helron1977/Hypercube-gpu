@@ -43,7 +43,7 @@
         import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
         const canvas = document.getElementById('c');
         const log = document.getElementById('log');
-        let engine, wgsl, running = false, fc = 0, lt = 0;
+        let engine, wgsl, lx, running = false, fc = 0, lt = 0;
         const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
 
         document.getElementById('btnStart').onclick = async () => {
@@ -53,6 +53,7 @@
             const m = await f.loadManifest('../manifests/noise_audit.json');
             L('[2/3] Building engine...');
             engine = await f.build(m.config, m.engine);
+            lx = engine.buffer.layout.strideRow;
             L('[3/3] Loading kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/NoiseCore.wgsl')).text();
             running = true; lt = performance.now();
@@ -67,7 +68,8 @@
             await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
                 mode: 'single', nx: 256, ny: 256,
                 faceIdx: 0,
-                strideFace: engine.buffer.strideFace, scale: 1.0
+                strideFace: engine.buffer.strideFace, scale: 1.0,
+                strideRow: lx, ghosts: 1
             });
             fc++;
             if (now - lt > 500) {

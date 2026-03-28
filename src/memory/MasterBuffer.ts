@@ -132,17 +132,16 @@ export class MasterBuffer implements IMasterBuffer {
 
         copyOffsetsBytes.forEach((offset, i) => {
             const data = new Float32Array(stagingBuffers[i].getMappedRange());
-            
-            // Diagnostic Telemetry (Layer 2)
-            if (data[0] !== 0 || data[10] !== 0) {
-                console.log(`[DEBUG_SYNC] Buffer ${i} (Offset ${offset}) contains non-zero data! First sample: ${data[0]}`);
-            }
-
+            // Rapatriement effectif vers le RawBuffer (CPU)
             const cpuView = new Float32Array(this.rawBuffer, offset, faceBytes[i] / 4);
             cpuView.set(data);
             stagingBuffers[i].unmap();
             stagingBuffers[i].destroy();
         });
+    }
+
+    public destroy(): void {
+        if (this.gpuBuffer) this.gpuBuffer.destroy();
     }
 
     public syncToDevice(): void {

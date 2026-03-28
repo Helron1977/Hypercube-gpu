@@ -12,29 +12,21 @@ import { HypercubeGPUContext } from '../../src/gpu/HypercubeGPUContext';
 
 // PROBE KERNEL: Writes its own params to the buffer
 const PROBE_WGSL = `
-struct Params {
-    nx: u32, ny: u32, lx: u32, ly: u32,
-    t: f32, tick: u32, strideFace: u32, numFaces: u32,
-    p0: f32, p1: f32, p2: f32, p3: f32, p4: f32, p5: f32, p6: f32, p7: f32,
-    f0: u32, f1: u32, f2: u32, f3: u32, f4: u32, f5: u32, f6: u32, f7: u32
-};
-@group(0) @binding(0) var<storage, read_write> data: array<f32>;
-@group(0) @binding(1) var<uniform> params: Params;
-
+// Redefinition struct Params removed - using inherited uniforms
 @compute @workgroup_size(4, 4)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    if (id.x >= params.nx || id.y >= params.ny) { return; }
-    let i = (id.y + 1u) * params.lx + (id.x + 1u);
+    if (id.x >= uniforms.nx || id.y >= uniforms.ny) { return; }
+    let i = (id.y + 1u) * uniforms.strideRow + (id.x + 1u);
     
-    let f0_idx = params.f0;
-    let f1_idx = params.f1;
-    let tick = params.tick;
+    let f0_idx = uniforms.faces[0];
+    let f1_idx = uniforms.faces[1];
+    let tick = uniforms.tick;
     
     // Write probe values
-    data[f0_idx * params.strideFace + i] = f32(tick) + 100.0;
+    data[f0_idx * uniforms.strideFace + i] = f32(tick) + 100.0;
     
     let parity = tick % 2u;
-    data[(f1_idx + parity) * params.strideFace + i] = f32(tick) + 500.0;
+    data[(f1_idx + parity) * uniforms.strideFace + i] = f32(tick) + 500.0;
 }
 `;
 

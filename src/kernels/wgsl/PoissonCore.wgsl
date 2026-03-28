@@ -1,29 +1,11 @@
-struct Params {
-    nx: u32, ny: u32, lx: u32, ly: u32,
-    t: f32, tick: u32, strideFace: u32, numFaces: u32,
-    p0: f32, p1: f32, p2: f32, p3: f32, p4: f32, p5: f32, p6: f32, p7: f32,
-    f0: u32, f1: u32, f2: u32, f3: u32, f4: u32, f5: u32, f6: u32, f7: u32,
-    f8: u32, f9: u32, f10: u32, f11: u32, f12: u32, f13: u32, f14: u32, f15: u32,
-    leftRole: u32, rightRole: u32, topRole: u32, bottomRole: u32, frontRole: u32, backRole: u32
-};
-
-@group(0) @binding(0) var<storage, read_write> data: array<f32>;
-@group(0) @binding(1) var<uniform> params: Params;
+// Redefinition struct Params removed - using inherited uniforms
 
 @compute @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let px = id.x; let py = id.y;
-    if (px >= params.nx || py >= params.ny) { return; }
+    if (px >= uniforms.nx || py >= uniforms.ny) { return; }
 
-    let lx = params.lx;
-    let i = (py + 1u) * lx + (px + 1u);
-    let strideFace = params.strideFace;
-
-    // Phi_next = (Phi_L + Phi_R + Phi_T + Phi_B - rhs*dx^2) / 4
-    let basePhi = params.f0 * strideFace + i;
-    let baseNext = params.f1 * strideFace + i;
-    let baseRhs = params.f2 * strideFace + i;
-    
-    let lapSum = data[basePhi-1u] + data[basePhi+1u] + data[basePhi-lx] + data[basePhi+lx];
-    data[baseNext] = (lapSum - data[baseRhs]) * 0.25;
+    // Use generated macros (phi is first face in rule: read, write, rhs)
+    let lapSum = read_phi(px - 1u, py) + read_phi(px + 1u, py) + read_phi(px, py - 1u) + read_phi(px, py + 1u);
+    write_phi(px, py, (lapSum - read_rhs(px, py)) * 0.25);
 }

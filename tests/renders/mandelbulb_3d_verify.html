@@ -58,7 +58,7 @@
         import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
         const canvas = document.getElementById('c');
         const log = document.getElementById('log');
-        let engine, wgsl, running = false, fc = 0, lt = 0;
+        let engine, wgsl, lx, running = false, fc = 0, lt = 0;
         const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
 
         document.getElementById('btnStart').onclick = async () => {
@@ -68,6 +68,7 @@
             const m = await f.loadManifest('../manifests/mandelbulb_audit.json');
             L('[2/3] Building 3D engine (64³)...');
             engine = await f.build(m.config, m.engine);
+            lx = engine.buffer.layout.strideRow;
             L('[3/3] Loading fractal kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/MandelbulbCore.wgsl')).text();
             running = true; lt = performance.now();
@@ -93,7 +94,8 @@
                 mode: 'fractal', nx: 64, ny: 64, nz: 64,
                 pz_layer: pz,
                 faceIdx: faceIdx,
-                strideFace: engine.buffer.strideFace
+                strideFace: engine.buffer.strideFace,
+                strideRow: lx, ghosts: 1
             });
             fc++;
             if (now - lt > 500) {

@@ -8,28 +8,24 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     // Logic: f0 (Input), f1 (Output)
     // Indexing assumes 1-pixel ghost halo
     let gx = px + 1u; let gy = py + 1u;
-    
-    let myState = read_s_Now(px, py);
-    var sum = 0.0;
-    
-    for(var dy = -1; dy <= 1; dy++) {
-        for(var dx = -1; dx <= 1; dx++) {
-            if (dx == 0 && dy == 0) { continue; }
-            let nx_i = i32(px) + dx;
-            let ny_i = i32(py) + dy;
-            
-            if (nx_i >= 0 && nx_i < i32(nx) && ny_i >= 0 && ny_i < i32(ny)) {
-                if (read_s_Now(u32(nx_i), u32(ny_i)) > 0.5) { sum += 1.0; }
-            }
+    // Count neighbors using Standard Macros
+    var neighbors = 0u;
+    for (var j = -1i; j <= 1i; j++) {
+        for (var i = -1i; i <= 1i; i++) {
+            if (i == 0i && j == 0i) { continue; }
+            let val = read_s(u32(i32(px) + i), u32(i32(py) + j));
+            if (val > 0.5) { neighbors++; }
         }
     }
-    
+
+    let state = read_s(px, py);
     var nextState = 0.0;
-    if (myState > 0.5) {
-        if (sum >= 2.0 && sum <= 3.0) { nextState = 1.0; }
+
+    if (state > 0.5) {
+        if (neighbors == 2u || neighbors == 3u) { nextState = 1.0; }
     } else {
-        if (sum == 3.0) { nextState = 1.0; }
+        if (neighbors == 3u) { nextState = 1.0; }
     }
-    
-    write_s_Next(px, py, nextState);
+
+    write_s(px, py, nextState);
 }

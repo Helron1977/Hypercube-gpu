@@ -55,7 +55,7 @@
             const m = await f.loadManifest('../manifests/jfa_audit.json');
             L('[2/4] Building engine...');
             const engine = await f.build(m.config, m.engine);
-            const lx = m.config.dimensions.nx + 2;
+            const lx = engine.buffer.layout.strideRow;
             const cells = engine.buffer.layout.cellsPerFaceRaw;
             const strideFace = engine.buffer.strideFace;
 
@@ -87,7 +87,8 @@
                 const ri = engine.parityManager.getFaceIndices('uv').read;
                 await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
                     mode: 'jfa', nx: 128, ny: 128,
-                    faceIdx: ri, strideFace
+                    faceIdx: ri, strideFace, 
+                    ghosts: 1, strideRow: lx
                 });
                 k = Math.floor(k / 2);
                 await new Promise(r => setTimeout(r, 120));
