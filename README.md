@@ -47,6 +47,9 @@ The core framework provides a library of validated "Mother-Models". Refer to the
 
 ---
 
+## Release History
+See [CHANGELOG.md](./CHANGELOG.md) for full details of the **v5.0.0** Major Release.
+
 ## Installation & Usage
 ```bash
 npm install @hypercube/gpu-core 
@@ -85,4 +88,4 @@ async function loop() {
 - `src/GpuEngine.ts`: The unified simulation interface.
 
 ## License
-MIT
+MIT — Hypercube GPU Core v5.0.0
