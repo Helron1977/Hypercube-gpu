@@ -53,10 +53,10 @@ export class MasterBuffer implements IMasterBuffer {
 
             for (let fIdx = 0; fIdx < this.layout.faceMappings.length; fIdx++) {
                 const face = this.layout.faceMappings[fIdx];
-                const numBuffers = face.isPingPong ? 2 : 1;
+                const numBuffers = face.numSlots;
                 
                 for (let b = 0; b < numBuffers; b++) {
-                    const offset = this.layout.getFaceOffset(i, fIdx, b === 1);
+                    const offset = this.layout.getFaceOffset(i, fIdx, b);
                     const viewLength = face.numComponents * this.strideFace;
                     
                     const view = new Float32Array(this.rawBuffer, offset * 4, viewLength);
@@ -106,17 +106,13 @@ export class MasterBuffer implements IMasterBuffer {
         let runningOffsetBytes = 0;
         
         faceIndices.forEach((fIdx, i) => {
-            const faceName = faces[i] as string;
-            const faceDesc = dataContract.descriptor.faces.find(f => f.name === faceName);
-            const numComponents = faceDesc?.type === 'scalar' ? 1 
-                                : faceDesc?.type === 'vector' ? 3 
-                                : faceDesc?.type === 'population' ? 9 : 1;
-            
-            const numBuffers = faceDesc?.isPingPong ? 2 : 1;
+            const faceMapping = dataContract.getFaceMappings()[fIdx];
+            const numComponents = faceMapping.numComponents;
+            const numBuffers = faceMapping.numSlots;
             for (let b = 0; b < numBuffers; b++) {
                 const bytes = numComponents * this.strideFace * 4;
                 faceBytes.push(bytes);
-                const offsetFloats = this.layout.getFaceOffset(0, fIdx, b === 1);
+                const offsetFloats = this.layout.getFaceOffset(0, fIdx, b);
                 copyOffsetsBytes.push(offsetFloats * 4);
             }
         });
@@ -166,18 +162,21 @@ export class MasterBuffer implements IMasterBuffer {
 
         if (faceIdx === -1) return;
 
+        const m = this.layout.faceMappings[faceIdx];
         let bufIdx = 0;
         for (let i = 0; i < faceIdx; i++) {
-            bufIdx += this.layout.faceMappings[i].isPingPong ? 2 : 1;
+            bufIdx += this.layout.faceMappings[i].numSlots;
         }
 
-        const targetBufIdx = (parity !== undefined && this.layout.faceMappings[faceIdx].isPingPong) 
-                            ? bufIdx + parity 
+        const targetBufIdx = (parity !== undefined && m.numSlots > 1) 
+                            ? bufIdx + (parity % m.numSlots)
                             : bufIdx;
 
         views.faces[targetBufIdx].set(data as Float32Array);
-        if (fillAllPingPong && this.layout.faceMappings[faceIdx].isPingPong) {
-            views.faces[bufIdx + 1].set(data as Float32Array);
+        if (fillAllPingPong && m.numSlots > 1) {
+            for (let slot = 0; slot < m.numSlots; slot++) {
+                views.faces[bufIdx + slot].set(data as Float32Array);
+            }
         }
     }
 
@@ -187,13 +186,14 @@ export class MasterBuffer implements IMasterBuffer {
         const faceIdx = dataContract.descriptor.faces.findIndex(f => f.name === faceName);
         if (faceIdx === -1) throw new Error(`Face ${faceName} not found.`);
 
+        const m = this.layout.faceMappings[faceIdx];
         let bufIdx = 0;
         for (let i = 0; i < faceIdx; i++) {
-            bufIdx += this.layout.faceMappings[i].isPingPong ? 2 : 1;
+            bufIdx += this.layout.faceMappings[i].numSlots;
         }
 
-        const targetBufIdx = (parity !== undefined && this.layout.faceMappings[faceIdx].isPingPong) 
-                            ? bufIdx + parity 
+        const targetBufIdx = (parity !== undefined && m.numSlots > 1) 
+                            ? bufIdx + (parity % m.numSlots)
                             : bufIdx;
 
         return views.faces[targetBufIdx];

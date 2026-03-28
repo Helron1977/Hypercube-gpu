@@ -44,13 +44,15 @@ export class GpuDemoHelper {
         
         const ctx = canvas.getContext('2d');
         const imageData = ctx.createImageData(nx, ny);
-        const lx = nx + 2;
-        const ly = ny + 2;
+
+        const ghosts = options.ghosts !== undefined ? options.ghosts : 0;
+        const lx = options.strideRow || (nx + 2 * ghosts);
+        const ly = ny + 2 * ghosts;
 
         for (let y = 0; y < ny; y++) {
             for (let x = 0; x < nx; x++) {
-                const z_off = (nz > 1) ? (pz_layer + 1) * lx * ly : 0;
-                const i_node = z_off + (y + 1) * lx + (x + 1);
+                const z_off = (nz > 1) ? (pz_layer + ghosts) * lx * ly : 0;
+                const i_node = z_off + (y + ghosts) * lx + (x + ghosts);
                 const i4 = (y * nx + x) * 4;
                 
                 let r = 0, g = 0, b = 0;

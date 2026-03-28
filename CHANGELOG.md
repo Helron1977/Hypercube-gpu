@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.0.1] - 2026-03-28
+
+### Fixed
+- **Anti-Drift (Temporal)** : Resolved "sliding" visual artifacts in static kernels by decoupling `uniforms.t` from the default evaluation logic. Added `p2` time-multiplier parameter to `FunctionCore` for opt-in animation.
+- **Anti-Drift (Spatial)** : Verified `strideRow` alignment between GPU indexing and JS rendering across all ghost cell configurations (0, 1).
+- **Coordinate Stability** : Implemented a comprehensive Anti-Drift test suite (`tests/unit/gpu_v5_drift.test.ts`) to prevent future regressions in grid indexing.
+
 ## [5.0.0] - 2026-03-28
 
 ### 🚀 Major Architectural Shift (Standalone Core)
@@ -30,10 +37,11 @@ This version marks the official separation of the GPU Compute Core from the mono
 - **Performance Guideline** : Documentation of the **Zero-Readback** philosophy (keeping data in VRAM).
 
 ### Fixed
-- **Uniform Guard** : Fixed a critical bug where boundary roles were overwriting face indices.
-- **Type Emission** : Automatic generation of `.d.ts` definitions in `dist/src/`.
-- Resolved ghost cell synchronization race conditions.
-- Improved error messaging for buffer partitioning.
+- **Uniform Guard** : Fixed a critical bug where boundary roles were overwriting face indices. Moved roles/ghosts to offset 80+.
+- **Coordinate Shift** : Fixed manual index math in `FunctionCore` by standardizing on `getIndex(x, y)` and `getIndex3D(x, y, z)` macros.
+- **Shader Compatibility** : Standardized on a single `Uniforms` struct, eliminating shader compilation errors caused by redundant `struct Params` definitions.
+- **DataContract Sync** : Fixed bug where `numComponents` was ignored in memory allocation.
+- **D3Q27 Stability** : Verified 27-velocity model for 3D LBM with new unit tests.
 
 ---
 

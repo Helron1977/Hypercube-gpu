@@ -11,8 +11,8 @@ describe('MemoryLayout', () => {
             ],
             dataContract: {
                 getFaceMappings: () => [
-                    { name: 'rho', isPingPong: true, numComponents: 1 },
-                    { name: 'vx', isPingPong: false, numComponents: 1 }
+                    { name: 'rho', isPingPong: true, numComponents: 1, numSlots: 2 },
+                    { name: 'vx', isPingPong: false, numComponents: 1, numSlots: 1 }
                 ],
                 descriptor: {
                     requirements: { ghostCells: 1 }
@@ -29,18 +29,18 @@ describe('MemoryLayout', () => {
         expect(layout.strideFace).toBe(16960);
 
         // Face 0: offset 0
-        expect(layout.getFaceOffset(0, 0)).toBe(0);
+        expect(layout.getFaceOffset(0, 0, 0)).toBe(0);
         // Face 1: offset 2 * 16960 (Face 0 is ping-pong, takes 2 slots)
-        expect(layout.getFaceOffset(0, 1)).toBe(33920);
+        expect(layout.getFaceOffset(0, 1, 0)).toBe(33920);
 
         // Chunk 0, Face 0 read (slot 0)
-        expect(layout.getFaceOffset(0, 0, false)).toBe(0);
+        expect(layout.getFaceOffset(0, 0, 0)).toBe(0);
         // Chunk 0, Face 0 write (slot 1)
-        expect(layout.getFaceOffset(0, 0, true)).toBe(16960);
+        expect(layout.getFaceOffset(0, 0, 1)).toBe(16960);
         // Chunk 0, Face 1 (slot 2)
-        expect(layout.getFaceOffset(0, 1)).toBe(2 * 16960);
+        expect(layout.getFaceOffset(0, 1, 0)).toBe(2 * 16960);
         
         // Chunk 1, Face 0 (slot 3)
-        expect(layout.getFaceOffset(1, 0)).toBe(3 * 16960);
+        expect(layout.getFaceOffset(1, 0, 0)).toBe(3 * 16960);
     });
 });

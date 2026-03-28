@@ -1,0 +1,41 @@
+{
+  "name": "LBM 3D D3Q27 Audit",
+  "version": "1.0.0",
+  "config": {
+    "dimensions": { "nx": 64, "ny": 64, "nz": 64 },
+    "chunks": { "x": 1, "y": 1, "z": 1 },
+    "boundaries": {
+      "left": { "role": "inflow" },
+      "right": { "role": "outflow" },
+      "all": { "role": "wall" }
+    },
+    "engine": "Lbm3DScientific",
+    "params": {
+      "omega": 1.0,
+      "inflow": 0.05
+    }
+  },
+  "engine": {
+    "name": "Lbm3DScientific",
+    "version": "1.0.0",
+    "faces": [
+      { "name": "type", "type": "mask", "isSynchronized": false },
+      { "name": "ux", "type": "macro", "isSynchronized": true },
+      { "name": "uy", "type": "macro", "isSynchronized": true },
+      { "name": "uz", "type": "macro", "isSynchronized": true },
+      { "name": "rho", "type": "scalar", "isSynchronized": true },
+      { "name": "f", "type": "population", "components": 27, "isSynchronized": true, "numSlots": 2 }
+    ],
+    "rules": [
+      { 
+        "type": "Lbm3DCore", 
+        "source": "/src/kernels/wgsl/Lbm3DCore.wgsl", 
+        "faces": ["type.now", "ux.now", "uy.now", "uz.now", "rho.now", "f.now", "f.next"] 
+      }
+    ],
+    "requirements": {
+      "ghostCells": 1,
+      "pingPong": true
+    }
+  }
+}

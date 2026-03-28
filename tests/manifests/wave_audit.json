@@ -11,12 +11,10 @@
     "version": "1.0",
     "requirements": { "ghostCells": 1, "pingPong": false },
     "faces": [
-      { "name": "uNow", "type": "field", "isSynchronized": true },
-      { "name": "uOld", "type": "field", "isSynchronized": true },
-      { "name": "uNext", "type": "field", "isSynchronized": true }
+      { "name": "u", "type": "field", "isSynchronized": true, "numSlots": 3 }
     ],
     "rules": [
-      { "type": "WaveCore", "source": "/src/kernels/wgsl/WaveCore.wgsl", "faces": ["uNow", "uOld", "uNext"] }
+      { "type": "WaveCore", "source": "/src/kernels/wgsl/WaveCore.wgsl", "faces": ["u.now", "u.old", "u.next"] }
     ]
   }
 }

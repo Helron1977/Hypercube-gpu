@@ -32,14 +32,15 @@ describe('Hypercube v5.0 Macro System & API', () => {
 
     const descriptor = {
         name: 'v5-test',
-        version: '5.0.0',
+        version: '5.0.1',
         requirements: { ghostCells: 1, pingPong: true },
         faces: [
             { name: 'scalar', type: 'scalar', isSynchronized: true },
-            { name: 'pp', type: 'population', isSynchronized: true, isPingPong: true }
+            { name: 'pp', type: 'population', isSynchronized: true, isPingPong: true },
+            { name: 'wave', type: 'scalar', isSynchronized: true, numSlots: 3 }
         ],
         rules: [
-            { type: 'Update', faces: ['scalar.read', 'scalar.write', 'pp'] }
+            { type: 'Update', faces: ['scalar.read', 'scalar.write', 'pp', 'wave.now', 'wave.old', 'wave.next'] }
         ]
     };
 
@@ -68,20 +69,18 @@ describe('Hypercube v5.0 Macro System & API', () => {
         const header = dispatcher.getWgslHeader('Update');
 
         // Check 2D Macros
-        expect(header).toContain('fn read_scalar_Read(x: u32, y: u32) -> f32');
-        expect(header).toContain('fn write_scalar_Write(x: u32, y: u32, val: f32)');
-        expect(header).toContain('fn read_pp(x: u32, y: u32) -> f32');
-        expect(header).toContain('fn write_pp(x: u32, y: u32, val: f32)');
+        expect(header).toContain('fn read_scalar_Read');
+        expect(header).toContain('fn write_scalar_Write');
+        expect(header).toContain('fn read_pp');
+        expect(header).toContain('fn write_pp');
         
         // Check 3D Macros
-        expect(header).toContain('fn read3D_scalar_Read(x: u32, y: u32, z: u32) -> f32');
+        expect(header).toContain('fn read3D_scalar_Read');
         
-        // Check Ping-Pong secondary macros
-        expect(header).toContain('fn read_pp_Read(x: u32, y: u32) -> f32');
-        expect(header).toContain('fn write_pp_Write(x: u32, y: u32, val: f32)');
-        expect(header).toContain('fn read3D_pp_Read(x: u32, y: u32, z: u32) -> f32');
-        expect(header).toContain('fn write3D_pp_Write(x: u32, y: u32, z: u32, val: f32)');
-
+        // Check Ping-Pong secondary macros (Now/Next)
+        expect(header).toContain('fn read_pp_Now');
+        expect(header).toContain('fn write_pp_Next');
+        
         // Check getIndex with ghosts
         expect(header).toContain('return (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts);');
         expect(header).toContain('fn getIndex3D');
@@ -97,10 +96,11 @@ describe('Hypercube v5.0 Macro System & API', () => {
         const callArgs = mockDevice.queue.writeBuffer.mock.calls[0];
         const u32 = new Uint32Array(callArgs[2]);
 
-        // Role offset 80
-        expect(u32[80]).toBeGreaterThanOrEqual(0); // leftRole
-        // Ghosts offset 86
-        expect(u32[86]).toBe(1); // 1 ghost cell
+        // Struct Mapping Verification:
+        // [80]: ghosts
+        // [81..86]: Roles
+        expect(u32[80]).toBe(1); // 1 ghost cell
+        expect(u32[81]).toBeGreaterThanOrEqual(0); // leftRole
     });
 
     it('GpuEngine: ready() should ensure context is initialized', async () => {

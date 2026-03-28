@@ -6,7 +6,7 @@ import { DataContract } from './DataContract';
  */
 export class ParityManager {
     public currentTick: number = 0;
-    private faceIndexCache: Map<string, { base: number; read: number; write: number }> = new Map();
+    private faceIndexCache: Map<string, { base: number; read: number; write: number; old: number }> = new Map();
 
     constructor(private dataContract: DataContract) {
         this.updateCache();
@@ -17,26 +17,13 @@ export class ParityManager {
         this.updateCache();
     }
 
-    public getFaceIndices(faceName: string, modulo: number = 2): { base: number; read: number; write: number } {
+    public getFaceIndices(faceName: string, modulo?: number): { base: number; read: number; write: number; old: number } {
         const indices = this.faceIndexCache.get(faceName);
         if (!indices) {
             throw new Error(`ParityManager: Face '${faceName}' not found.`);
         }
         
-        // If the user requests a different modulo (e.g. 3 for WAVE), we override the cache logic
-        if (modulo > 2) {
-            const mappings = this.dataContract.getFaceMappings();
-            const m = mappings.find(f => f.name === faceName);
-            if (m && m.isPingPong) {
-                const tick = this.currentTick % modulo;
-                return {
-                    base: indices.base,
-                    read: indices.base + (tick * m.numComponents),
-                    write: indices.base + (((tick + 1) % modulo) * m.numComponents)
-                };
-            }
-        }
-
+        // Use the cached indices which are pre-calculated for the correct numSlots
         return indices;
     }
 
@@ -45,20 +32,21 @@ export class ParityManager {
         let absolutePointer = 0;
 
         for (const m of mappings) {
-            if (m.isPingPong) {
-                // Alternates between [pointer, pointer+numComponents] and [pointer+numComponents, pointer]
-                const parity = this.currentTick % 2;
+            if (m.numSlots > 1) {
+                const tick = this.currentTick % m.numSlots;
                 this.faceIndexCache.set(m.name, {
                     base: absolutePointer,
-                    read: absolutePointer + (parity * m.numComponents),
-                    write: absolutePointer + ((1 - parity) * m.numComponents)
+                    read: absolutePointer + (tick * m.numComponents),
+                    write: absolutePointer + (((tick + 1) % m.numSlots) * m.numComponents),
+                    old: absolutePointer + (((tick - 1 + m.numSlots) % m.numSlots) * m.numComponents)
                 });
-                absolutePointer += 2 * m.numComponents;
+                absolutePointer += m.numSlots * m.numComponents;
             } else {
                 this.faceIndexCache.set(m.name, {
                     base: absolutePointer,
                     read: absolutePointer,
-                    write: absolutePointer
+                    write: absolutePointer,
+                    old: absolutePointer
                 });
                 absolutePointer += m.numComponents;
             }

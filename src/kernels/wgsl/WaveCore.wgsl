@@ -1,52 +1,28 @@
-struct Params {
-    nx: u32, ny: u32, lx: u32, ly: u32,
-    t: f32, tick: u32, strideFace: u32, numFaces: u32,
-    p0: f32, p1: f32, p2: f32, p3: f32, p4: f32, p5: f32, p6: f32, p7: f32,
-    f0: u32, f1: u32, f2: u32, f3: u32, f4: u32, f5: u32, f6: u32, f7: u32,
-    f8: u32, f9: u32, f10: u32, f11: u32, f12: u32, f13: u32, f14: u32, f15: u32,
-    leftRole: u32, rightRole: u32, topRole: u32, bottomRole: u32, frontRole: u32, backRole: u32
-};
-
-@group(0) @binding(0) var<storage, read_write> data: array<f32>;
-@group(0) @binding(1) var<uniform> params: Params;
-
 @compute @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let px = id.x; let py = id.y;
-    if (px >= params.nx || py >= params.ny) { return; }
-
-    let lx = params.lx;
-    let i = (py + 1u) * lx + (px + 1u);
-    let strideFace = params.strideFace;
-
-    // Cycle faces via tick: each step rotates which face is "now", "old", "next"
-    // f0, f1, f2 are the 3 face indices; tick % 3 determines the role assignment
-    let phase = params.tick % 3u;
-    var fNow: u32; var fOld: u32; var fNext: u32;
-    if (phase == 0u) { fNow = params.f0; fOld = params.f1; fNext = params.f2; }
-    else if (phase == 1u) { fNow = params.f2; fOld = params.f0; fNext = params.f1; }
-    else { fNow = params.f1; fOld = params.f2; fNext = params.f0; }
+    if (px >= uniforms.nx || py >= uniforms.ny) { return; }
 
     // p0: alpha (c^2 * dt^2 / dx^2)
     // p5: u_dirichlet_left, p6: u_dirichlet_right
-    let uNow = data[fNow * strideFace + i];
-    let uOld = data[fOld * strideFace + i];
+    let uNow = read_u_Now(px, py);
+    let uOld = read_u_Old(px, py);
     
-    var UL = data[fNow * strideFace + i - 1u];
-    var UR = data[fNow * strideFace + i + 1u];
-    var UT = data[fNow * strideFace + i - lx];
-    var UB = data[fNow * strideFace + i + lx];
+    var UL = read_u_Now(px - 1u, py);
+    var UR = read_u_Now(px + 1u, py);
+    var UT = read_u_Now(px, py - 1u);
+    var UB = read_u_Now(px, py + 1u);
     
     // Boundary Roles (8: Dirichlet, 9: Neumann/Mirror)
     if (px == 0u) {
-        if (params.leftRole == 8u) { UL = params.p5; }
-        else if (params.leftRole == 9u) { UL = uNow; }
+        if (uniforms.leftRole == 8u) { UL = uniforms.p5; }
+        else if (uniforms.leftRole == 9u) { UL = uNow; }
     }
-    if (px == params.nx - 1u) {
-        if (params.rightRole == 8u) { UR = params.p6; }
-        else if (params.rightRole == 9u) { UR = uNow; }
+    if (px == uniforms.nx - 1u) {
+        if (uniforms.rightRole == 8u) { UR = uniforms.p6; }
+        else if (uniforms.rightRole == 9u) { UR = uNow; }
     }
     
     let lap = UL + UR + UT + UB - 4.0 * uNow;
-    data[fNext * strideFace + i] = 2.0 * uNow - uOld + params.p0 * lap;
+    write_u_Next(px, py, 2.0 * uNow - uOld + uniforms.p0 * lap);
 }

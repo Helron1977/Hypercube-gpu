@@ -9,6 +9,7 @@ export interface FaceMapping {
     type: string;
     requiresSync: boolean;
     isPingPong: boolean;
+    numSlots: number;
     numComponents: number;
 }
 
@@ -21,17 +22,23 @@ export class DataContract {
                 ? face.isPingPong
                 : (face.isSynchronized && this.descriptor.requirements.pingPong && !face.isReadOnly);
 
-            const numComponents = face.type === 'scalar' ? 1 
+            const numComponents = face.numComponents !== undefined 
+                                ? face.numComponents 
+                                : (face.type === 'scalar' ? 1 
                                 : face.type === 'vector' ? 3 
                                 : face.type === 'population' ? 9 
-                                : face.type === 'population3D' ? 19 : 1;
+                                : face.type === 'population3D' ? 19 : 1);
+
+            const isPingPongActive = !!isPingPong;
+            const numSlots = face.numSlots || (isPingPongActive ? 2 : 1);
 
             return {
                 faceIndex: index,
                 name: face.name,
                 type: face.type,
                 requiresSync: face.isSynchronized,
-                isPingPong: !!isPingPong,
+                isPingPong: isPingPongActive,
+                numSlots,
                 numComponents
             };
         });
@@ -47,7 +54,7 @@ export class DataContract {
         const faceMappings = this.getFaceMappings();
         let totalBuffers = 0;
         for (const f of faceMappings) {
-            totalBuffers += f.numComponents * (f.isPingPong ? 2 : 1);
+            totalBuffers += f.numComponents * f.numSlots;
         }
 
         return cellsPerFace * floatSize * totalBuffers;

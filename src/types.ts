@@ -50,6 +50,8 @@ export interface EngineFace {
     isReadOnly?: boolean;
     isPersistent?: boolean;
     isPingPong?: boolean;
+    numSlots?: number; // Optional: specify number of buffers (e.g. 3 for triple-buffered waves)
+    numComponents?: number; // Optional: specify number of components (e.g. 27 for LBM D3Q27)
     defaultValue?: number;
 }
 

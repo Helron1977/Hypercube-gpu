@@ -53,7 +53,7 @@
         import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
         const canvas = document.getElementById('c');
         const log = document.getElementById('log');
-        let engine, wgsl, running = false, fc = 0, lt = 0, strideFace = 0, lx = 0;
+        let engine, wgsl, m, running = false, fc = 0, lt = 0, strideFace = 0, lx = 0;
         const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
 
         // Click to inject a pulse
@@ -71,7 +71,7 @@
                     if (r < 4) pulse[y*lx+x] = Math.cos(r/4*Math.PI*0.5);
                 }
             }
-            engine.setFaceData('chunk_0_0_0', 'uNow', pulse, false);
+            engine.setFaceData('chunk_0_0_0', 'u', pulse, false, 0);
             engine.syncToDevice();
         };
 
@@ -79,7 +79,7 @@
             if (running) return;
             L('[1/4] Loading manifest...');
             const f = new GpuCoreFactory();
-            const m = await f.loadManifest('../manifests/wave_audit.json');
+            m = await f.loadManifest('../manifests/wave_audit.json');
             L('[2/4] Building engine...');
             engine = await f.build(m.config, m.engine);
             strideFace = engine.buffer.strideFace;
@@ -93,14 +93,15 @@
                 const r = Math.sqrt(dx*dx+dy*dy);
                 if (r < 6) u0[(cy+1+dy)*lx+(cx+1+dx)] = Math.cos(r/6*Math.PI*0.5);
             }
-            engine.setFaceData('chunk_0_0_0', 'uNow', u0);
-            engine.setFaceData('chunk_0_0_0', 'uOld', new Float32Array(u0)); // copy
+            // Initialize slots: t=u0, t-1=u0
+            engine.setFaceData('chunk_0_0_0', 'u', u0, false, 0); 
+            engine.setFaceData('chunk_0_0_0', 'u', u0, false, 2); 
             engine.syncToDevice();
 
             L('[4/4] Loading kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/WaveCore.wgsl')).text();
             running = true; lt = performance.now();
-            L('✓ Wave propagating');
+            L('✓ Wave propagating (Native Triple-Buffering)');
             requestAnimationFrame(tick);
         };
 
@@ -114,22 +115,14 @@
 
             await engine.step({'WaveCore': wgsl}, 3); // 3 steps = one full rotation
 
-            // After 3 steps, tick%3==0 → uNext was written to f2
-            // Render uNext (the latest computed face)
-            const faces = ['uNow', 'uOld', 'uNext'];
-            const tick3 = engine.parityManager.currentTick % 3;
-            // The kernel at phase p wrote into fNext:
-            //   phase 0 → fNext = f2 (uNext)
-            //   phase 1 → fNext = f1 (uOld) 
-            //   phase 2 → fNext = f0 (uNow)
-            // After 3 steps (tick advanced by 3), the last write was at phase (tick-1)%3
-            const lastPhase = ((engine.parityManager.currentTick - 1) % 3 + 3) % 3;
-            const renderFace = lastPhase === 0 ? 'uNext' : lastPhase === 1 ? 'uOld' : 'uNow';
-            const faceIdx = engine.parityManager.getFaceIndices(renderFace).base;
+            // After rotation, render the current face (u.now)
+            const faceIdx = engine.parityManager.getFaceIndices('u').read;
             
             await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
                 mode: 'bipolar', nx: 256, ny: 256,
                 faceIdx: faceIdx,
+                ghosts: m.engine.requirements.ghostCells || 0,
+                strideRow: engine.buffer.layout.strideRow,
                 strideFace: strideFace, scale: 300.0
             });
             fc++;

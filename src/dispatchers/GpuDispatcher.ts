@@ -49,7 +49,7 @@ export class GpuDispatcher {
             }
             this.device = HypercubeGPUContext.device;
         }
-        this.bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(512); 
+        this.bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(512);
         this.refreshMetadata();
         if (typeof window !== 'undefined') (window as any).dispatcher = this;
     }
@@ -72,7 +72,7 @@ export class GpuDispatcher {
 
         const totalUniformSize = this.vGrid.chunks.length * this.MAX_RULES * this.bytesPerChunkAligned;
         this.stagingBuffer = new Uint32Array(totalUniformSize / 4);
-        
+
         for (let i = 0; i < this.dispatchMetadata.length; i++) {
             const meta = this.dispatchMetadata[i];
             const padding = this.vGrid.dataContract.descriptor.requirements.ghostCells || 0;
@@ -96,7 +96,7 @@ export class GpuDispatcher {
     }
 
     public async prepareKernels(kernels: Record<string, string>): Promise<void> {
-        const promises = Object.entries(kernels).map(([type, source]) => 
+        const promises = Object.entries(kernels).map(([type, source]) =>
             this.getPipeline(type, source)
         );
         await Promise.all(promises);
@@ -120,7 +120,7 @@ export class GpuDispatcher {
         this.reductionBuffer = extra?.reductionBuffer;
         const descriptor = this.vGrid.dataContract.descriptor;
         const strideFace = this.buffer.strideFace;
-        
+
         this.ensureBuffers();
         const u32Data = this.stagingBuffer!;
         const f32Data = new Float32Array(u32Data.buffer);
@@ -174,19 +174,32 @@ export class GpuDispatcher {
                     }
 
                     if (faceNameWithSuffix) {
-                        const faceName = faceNameWithSuffix.replace('.read', '').replace('.write', '');
-                        const res = this.parityManager.getFaceIndices(faceName, scheme.params?.modulo as number || 2);
-                        if (faceNameWithSuffix.endsWith('.read')) {
+                        const faceName = faceNameWithSuffix.replace('.read', '').replace('.write', '').replace('.now', '').replace('.old', '').replace('.next', '');
+                        const res = this.parityManager.getFaceIndices(faceName);
+
+                        if (faceNameWithSuffix.endsWith('.read') || faceNameWithSuffix.endsWith('.now')) {
                             u32Data[base + 16 + f] = res.read;
-                        } else if (faceNameWithSuffix.endsWith('.write')) {
+                        } else if (faceNameWithSuffix.endsWith('.write') || faceNameWithSuffix.endsWith('.next')) {
                             u32Data[base + 16 + f] = res.write;
+                        } else if (faceNameWithSuffix.endsWith('.old')) {
+                            u32Data[base + 16 + f] = res.old;
                         } else {
                             u32Data[base + 16 + f] = res.base;
                         }
                     } else {
-                        u32Data[base + 16 + f] = 999; 
+                        u32Data[base + 16 + f] = 0;
                     }
                 }
+
+                // Additional Professional Fields (Offset 80+)
+                const boundaries = this.vGrid.config.boundaries || {};
+                u32Data[base + 80] = ghosts;
+                u32Data[base + 81] = (boundaries.left?.role === 'inflow') ? 3 : ((boundaries.left?.role === 'outflow') ? 4 : 2);
+                u32Data[base + 82] = (boundaries.right?.role === 'inflow') ? 3 : ((boundaries.right?.role === 'outflow') ? 4 : 2);
+                u32Data[base + 83] = (boundaries.top?.role === 'moving_wall') ? 10 : 2;
+                u32Data[base + 84] = 2; // bottom
+                u32Data[base + 85] = 2; // front
+                u32Data[base + 86] = 2; // back
             }
         }
 
@@ -273,20 +286,29 @@ export class GpuDispatcher {
         const explicitFaces = rule?.faces || [];
         const faceMappings = this.vGrid.dataContract.getFaceMappings();
 
-        let header = `// Hypercube Auto-Generated Header for Rule: ${ruleType}\n`;
-        header += `struct HypercubeUniforms {\n`;
-        header += `  nx: u32, ny: u32, strideRow: u32, physicalNy: u32,\n`;
-        header += `  t: f32, tick: u32, strideFace: u32, numFaces: u32,\n`;
-        header += `  p0: f32, p1: f32, p2: f32, p3: f32,\n`;
-        header += `  p4: f32, p5: f32, p6: f32, p7: f32,\n`;
-        header += `  faces: array<u32, 64>,\n`;
-        header += `  leftRole: u32, rightRole: u32, topRole: u32, bottomRole: u32, frontRole: u32, backRole: u32,\n`;
-        header += `  ghosts: u32,\n`;
-        header += `  reserved: u32\n`;
-        header += `};\n\n`;
-        header += `@group(0) @binding(0) var<storage, read_write> data: array<f32>;\n`;
-        header += `@group(0) @binding(1) var<uniform> uniforms: HypercubeUniforms;\n\n`;
-        
+        let header = `
+struct Uniforms {
+  nx: u32, ny: u32, strideRow: u32, physicalNy: u32,
+  t: f32, tick: u32, strideFace: u32, numFaces: u32,
+  p0: f32, p1: f32, p2: f32, p3: f32,
+  p4: f32, p5: f32, p6: f32, p7: f32,
+  faces: array<u32, 64>,
+  ghosts: u32,
+  leftRole: u32, rightRole: u32, topRole: u32, bottomRole: u32, frontRole: u32, backRole: u32,
+  reserved: u32
+};
+@group(0) @binding(0) var<storage, read_write> data: array<f32>;
+@group(0) @binding(1) var<uniform> uniforms: Uniforms;
+
+fn getIndex(x: u32, y: u32) -> u32 { 
+    return (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts);
+}
+
+fn getIndex3D(x: u32, y: u32, z: u32) -> u32 { 
+    return (z + uniforms.ghosts) * uniforms.strideRow * uniforms.physicalNy + (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts);
+}
+\n`;
+
         // Face-specific helper functions (Macros)
         for (let f = 0; f < 64; f++) {
             let faceNameWithSuffix = "";
@@ -295,47 +317,54 @@ export class GpuDispatcher {
             } else if (f < faceMappings.length && explicitFaces.length === 0) {
                 faceNameWithSuffix = faceMappings[f].name;
             }
-            
+
             if (faceNameWithSuffix) {
-                const faceName = faceNameWithSuffix.replace('.read', '').replace('.write', '');
+                const faceName = faceNameWithSuffix.replace('.read', '').replace('.write', '').replace('.now', '').replace('.old', '').replace('.next', '');
                 const m = faceMappings.find(fm => fm.name === faceName);
-                
-                const idxMacro = `getIndex(u32(x), u32(y))`;
-                const idxMacro3D = `getIndex3D(u32(x), u32(y), u32(z))`;
-                
+
                 const suffix = faceNameWithSuffix.includes('.') ? faceNameWithSuffix.split('.')[1] : "";
-                const normalizedName = suffix ? faceName + "_" + (suffix.charAt(0).toUpperCase() + suffix.slice(1)) : faceName;
+
+                // Normalize suffix for macro name: Now, Old, Next, Read, Write
+                const normalizedSuffix = suffix ? suffix.charAt(0).toUpperCase() + suffix.slice(1).toLowerCase() : "";
+                const normalizedName = normalizedSuffix ? faceName + "_" + normalizedSuffix : faceName;
+
+                const numComp = m?.numComponents || 1;
+                const isMulti = numComp > 1;
+                const subSlotSuffix = isMulti ? `+ u32(d)` : "";
+                const readArgs = isMulti ? `x: u32, y: u32, d: u32` : `x: u32, y: u32`;
+                const read3DArgs = isMulti ? `x: u32, y: u32, z: u32, d: u32` : `x: u32, y: u32, z: u32`;
+                const writeArgs = isMulti ? `x: u32, y: u32, d: u32, val: f32` : `x: u32, y: u32, val: f32`;
+                const write3DArgs = isMulti ? `x: u32, y: u32, z: u32, d: u32, val: f32` : `x: u32, y: u32, z: u32, val: f32`;
+                const callArgs = isMulti ? `x, y, d` : `x, y`;
+                const call3DArgs = isMulti ? `x, y, z, d` : `x, y, z`;
 
                 // 2D Helpers
-                header += `fn read_${normalizedName}(x: u32, y: u32) -> f32 { return data[uniforms.faces[${f}] * uniforms.strideFace + ${idxMacro}]; }\n`;
-                header += `fn write_${normalizedName}(x: u32, y: u32, val: f32) { data[uniforms.faces[${f}] * uniforms.strideFace + ${idxMacro}] = val; }\n`;
+                header += `fn read_${normalizedName}(${readArgs}) -> f32 { return data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex(x, y)]; }\n`;
+                header += `fn write_${normalizedName}(${writeArgs}) { data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex(x, y)] = val; }\n`;
 
                 // 3D Helpers
-                header += `fn read3D_${normalizedName}(x: u32, y: u32, z: u32) -> f32 { return data[uniforms.faces[${f}] * uniforms.strideFace + ${idxMacro3D}]; }\n`;
-                header += `fn write3D_${normalizedName}(x: u32, y: u32, z: u32, val: f32) { data[uniforms.faces[${f}] * uniforms.strideFace + ${idxMacro3D}] = val; }\n`;
-                
-                if (m?.isPingPong && !suffix) {
-                    header += `fn read_${faceName}_Read(x: u32, y: u32) -> f32 { return read_${faceName}(x, y); }\n`;
-                    header += `fn write_${faceName}_Write(x: u32, y: u32, val: f32) { write_${faceName}(x, y, val); }\n`;
-                    header += `fn read3D_${faceName}_Read(x: u32, y: u32, z: u32) -> f32 { return read3D_${faceName}(x, y, z); }\n`;
-                    header += `fn write3D_${faceName}_Write(x: u32, y: u32, z: u32, val: f32) { write3D_${faceName}(x, y, z, val); }\n`;
+                header += `fn read3D_${normalizedName}(${read3DArgs}) -> f32 { return data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex3D(x, y, z)]; }\n`;
+                header += `fn write3D_${normalizedName}(${write3DArgs}) { data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex3D(x, y, z)] = val; }\n`;
+
+                if (m?.numSlots && m.numSlots > 1 && !suffix) {
+                    header += `fn read_${faceName}_Now(${readArgs}) -> f32 { return read_${faceName}(${callArgs}); }\n`;
+                    header += `fn write_${faceName}_Next(${writeArgs}) { write_${faceName}(${callArgs}, val); }\n`;
+
+                    // Backward Compatibility Aliases (_Read, _Write)
+                    header += `fn read_${faceName}_Read(${readArgs}) -> f32 { return read_${faceName}(${callArgs}); }\n`;
+                    header += `fn write_${faceName}_Write(${writeArgs}) { write_${faceName}(${callArgs}, val); }\n`;
+
+                    if (m.numSlots > 2) {
+                        header += `fn read_${faceName}_Old(${readArgs}) -> f32 { return data[(uniforms.faces[${f}] ${subSlotSuffix}) * uniforms.strideFace + getIndex(x, y)]; }\n`;
+                    }
                 }
             }
         }
 
-        header += `\nfn getIndex(x: u32, y: u32) -> u32 { \n`;
-        header += `  return (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts);\n`;
-        header += `}\n`;
-
-        header += `\nfn getIndex3D(x: u32, y: u32, z: u32) -> u32 { \n`;
-        header += `  let ly = uniforms.physicalNy;\n`;
-        header += `  return (z + uniforms.ghosts) * uniforms.strideRow * ly + (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts);\n`;
-        header += `}\n`;
-
         return header;
     }
 
-    private async getPipeline(type: string, source: string): Promise<GPUComputePipeline> {
+    private async getPipeline(ruleType: string, source: string): Promise<GPUComputePipeline> {
         // Sécurité Contextuelle : Si le device a changé, on doit TOUT purger
         if (this.device !== HypercubeGPUContext.device) {
             this.device = HypercubeGPUContext.device;
@@ -343,11 +372,14 @@ export class GpuDispatcher {
             this.pipelines.clear();
         }
 
-        const cacheKey = `${type}_${source.length}_${source.substring(0, 16)}`;
+        const header = this.getWgslHeader(ruleType);
+        const combinedSource = header + source;
+        const cacheKey = `${ruleType}_${combinedSource.length}_${combinedSource.substring(0, 32)}`;
+
         let p = this.pipelines.get(cacheKey);
         if (p) return p;
 
-        p = await HypercubeGPUContext.createComputePipelineAsync(source, `Kernel_${type}`);
+        p = await HypercubeGPUContext.createComputePipelineAsync(combinedSource, `Kernel_${ruleType}`);
         this.pipelines.set(cacheKey, p);
         return p;
     }
@@ -362,14 +394,14 @@ export class GpuDispatcher {
             });
         }
         this.device.queue.writeBuffer(this.forceResultsBuffer, 0, new Int32Array(4).fill(0));
-        const pipeline = await this.getPipeline(kernelName, source);
+        const pipeline = await this.getPipeline('Reduction', source);
         const encoder = this.device.createCommandEncoder();
         this.ensureBuffers();
         const faceMappings = this.vGrid.dataContract.getFaceMappings();
         const f32View = new Float32Array(this.stagingBuffer!.buffer);
-        
+
         for (let i = 0; i < this.dispatchMetadata.length; i++) {
-            const base = (i * this.MAX_RULES) * (this.bytesPerChunkAligned / 4); 
+            const base = (i * this.MAX_RULES) * (this.bytesPerChunkAligned / 4);
             const dim = this.dispatchMetadata[i].vChunk.localDimensions;
             const strideRow = this.buffer.layout?.strideRow || (dim.nx + 2);
             this.stagingBuffer![base + 0] = dim.nx;
@@ -380,7 +412,7 @@ export class GpuDispatcher {
             this.stagingBuffer![base + 5] = this.parityManager.currentTick;
             this.stagingBuffer![base + 6] = this.buffer.strideFace;
             this.stagingBuffer![base + 7] = faceMappings.length;
-            
+
             // On passe dynamiquement l'index de la face 'obstacle' et 'f'
             const obsIdx = faceMappings.findIndex(f => f.name === 'obstacle');
             const configParams = this.vGrid.config.params || {};
@@ -388,11 +420,11 @@ export class GpuDispatcher {
                 const key = `p${p}`;
                 if (configParams[key] !== undefined) f32View[base + 8 + p] = configParams[key];
             }
-            
+
             // Calcul du facteur d'échelle p7
             // Facteur global de réduction (Scaling) pour la précision atomique (Int32)
             f32View[base + 15] = (faceName) ? 10000.0 : 1000000000.0;
-            
+
             // Mapping STRICT du DataContract vers les slots f0...f15
             for (let f = 0; f < 16; f++) {
                 if (f < faceMappings.length) {
@@ -450,12 +482,12 @@ export class GpuDispatcher {
 
                 let axis = 0, srcPos = 0, dstPos = 0, size1 = 0, size2 = 0;
                 switch (joint.face) {
-                    case 'left':   axis = 0; srcPos = 1;  dstPos = dim.nx + 1; break;
-                    case 'right':  axis = 0; srcPos = dim.nx; dstPos = 0; break;
-                    case 'bottom': axis = 1; srcPos = 1;  dstPos = dim.ny + 1; break;
-                    case 'top':    axis = 1; srcPos = dim.ny; dstPos = 0; break;
-                    case 'back':   axis = 2; srcPos = 1;  dstPos = (dim.nz || 1) + 1; break;
-                    case 'front':  axis = 2; srcPos = (dim.nz || 1); dstPos = 0; break;
+                    case 'left': axis = 0; srcPos = 1; dstPos = dim.nx + 1; break;
+                    case 'right': axis = 0; srcPos = dim.nx; dstPos = 0; break;
+                    case 'bottom': axis = 1; srcPos = 1; dstPos = dim.ny + 1; break;
+                    case 'top': axis = 1; srcPos = dim.ny; dstPos = 0; break;
+                    case 'back': axis = 2; srcPos = 1; dstPos = (dim.nz || 1) + 1; break;
+                    case 'front': axis = 2; srcPos = (dim.nz || 1); dstPos = 0; break;
                     default: continue;
                 }
                 if (axis === 0) { size1 = ly; size2 = lz; }
@@ -466,8 +498,8 @@ export class GpuDispatcher {
                     srcBase: neighborMeta.dataOffset / 4,
                     dstBase: meta.dataOffset / 4,
                     stride, lx, ly, lz, numFaces, axis,
-                    srcPos: (joint.face === 'left' || joint.face === 'bottom' || joint.face === 'back') ? 
-                             (axis === 0 ? neighbor.localDimensions.nx : (axis === 1 ? neighbor.localDimensions.ny : neighbor.localDimensions.nz)) : 1,
+                    srcPos: (joint.face === 'left' || joint.face === 'bottom' || joint.face === 'back') ?
+                        (axis === 0 ? neighbor.localDimensions.nx : (axis === 1 ? neighbor.localDimensions.ny : neighbor.localDimensions.nz)) : 1,
                     dstPos, size1, size2
                 });
             }
@@ -488,9 +520,9 @@ export class GpuDispatcher {
         for (let i = 0; i < transfers.length; i++) {
             const t = transfers[i];
             const b = i * 12;
-            rawTransfers[b+0]=t.srcBase; rawTransfers[b+1]=t.dstBase; rawTransfers[b+2]=t.stride; rawTransfers[b+3]=t.lx;
-            rawTransfers[b+4]=t.ly; rawTransfers[b+5]=t.lz; rawTransfers[b+6]=t.numFaces; rawTransfers[b+7]=t.axis;
-            rawTransfers[b+8]=t.srcPos; rawTransfers[b+9]=t.dstPos; rawTransfers[b+10]=t.size1; rawTransfers[b+11]=t.size2;
+            rawTransfers[b + 0] = t.srcBase; rawTransfers[b + 1] = t.dstBase; rawTransfers[b + 2] = t.stride; rawTransfers[b + 3] = t.lx;
+            rawTransfers[b + 4] = t.ly; rawTransfers[b + 5] = t.lz; rawTransfers[b + 6] = t.numFaces; rawTransfers[b + 7] = t.axis;
+            rawTransfers[b + 8] = t.srcPos; rawTransfers[b + 9] = t.dstPos; rawTransfers[b + 10] = t.size1; rawTransfers[b + 11] = t.size2;
         }
         this.device.queue.writeBuffer(this.haloTransferBuffer, 0, rawTransfers);
 

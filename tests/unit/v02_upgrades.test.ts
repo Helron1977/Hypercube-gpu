@@ -51,7 +51,7 @@ describe('Hypercube GPU Core v0.2.0 Upgrades (TDD)', () => {
             name: 'v02-test',
             version: '1.0.0',
             faces: [
-                { name: 'rho', type: 'scalar', isSynchronized: true, isPingPong: true }
+                { name: 'rho', type: 'scalar', isSynchronized: true, isPingPong: true, numSlots: 3 }
             ],
             rules: [{ type: 'step', source: '// void', params: { modulo: 3 }, faces: ['rho.read', 'rho.write'] }],
             requirements: { ghostCells: 1, pingPong: true }

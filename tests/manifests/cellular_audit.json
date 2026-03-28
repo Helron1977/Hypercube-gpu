@@ -14,7 +14,7 @@
       { "name": "s", "type": "scalar", "isSynchronized": true }
     ],
     "rules": [
-      { "type": "CellularCore", "source": "/src/kernels/wgsl/CellularCore.wgsl", "faces": ["s.read", "s.write"] }
+      { "type": "CellularCore", "source": "/src/kernels/wgsl/CellularCore.wgsl", "faces": ["s.now", "s.next"] }
     ]
   }
 }

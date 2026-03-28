@@ -37,7 +37,7 @@
       { "name": "f", "type": "population", "components": 9, "isSynchronized": true }
     ],
     "rules": [
-      { "type": "LbmScientific", "source": "/src/kernels/wgsl/LbmCore.wgsl" }
+      { "type": "LbmScientific", "source": "/src/kernels/wgsl/LbmCore.wgsl", "faces": ["obs.now", "ux.now", "uy.now", "rho.now", "curl.now", "f.now", "f.next"] }
     ],
     "requirements": {
       "ghostCells": 1,

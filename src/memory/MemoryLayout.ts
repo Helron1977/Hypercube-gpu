@@ -35,7 +35,7 @@ export class MemoryLayout {
         const bytesPerFaceAligned = Math.ceil(bytesPerFaceRaw / 256) * 256;
         this.strideFace = bytesPerFaceAligned / 4;
 
-        this.totalSlotsPerChunk = this.faceMappings.reduce((acc, f) => acc + f.numComponents * (f.isPingPong ? 2 : 1), 0);
+        this.totalSlotsPerChunk = this.faceMappings.reduce((acc, f) => acc + (f.numComponents * f.numSlots), 0);
         this.byteLength = this.vGrid.chunks.length * this.totalSlotsPerChunk * bytesPerFaceAligned;
     }
 
@@ -43,12 +43,12 @@ export class MemoryLayout {
      /**
      * Calculates the float32 offset for a specific chunk and face.
      */
-    public getFaceOffset(chunkIdx: number, faceIdx: number, isBackBuffer: boolean = false): number {
+    public getFaceOffset(chunkIdx: number, faceIdx: number, slotIdx: number = 0): number {
         let offset = chunkIdx * this.totalSlotsPerChunk;
         for (let i = 0; i < faceIdx; i++) {
-            offset += this.faceMappings[i].numComponents * (this.faceMappings[i].isPingPong ? 2 : 1);
+            offset += this.faceMappings[i].numComponents * this.faceMappings[i].numSlots;
         }
-        if (isBackBuffer) offset += this.faceMappings[faceIdx].numComponents;
+        offset += slotIdx * this.faceMappings[faceIdx].numComponents;
         return offset * this.strideFace;
     }
 }

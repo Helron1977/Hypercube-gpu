@@ -37,12 +37,20 @@ let n = normalize(v);
 ```
 
 ### Macros Hypercube (Auto-injectées) :
-Grâce à `getWgslHeader()`, vous n'avez plus à calculer les index :
-- `read_faceName(x, y)` : Lit la valeur à la position x, y.
-- `write_faceName(x, y, value)` : Écrit la valeur.
-- `getIndex(x, y)` : Calcule l'index linéaire dans le buffer.
+Grâce à `getWgslHeader()`, vous n'avez plus à calculer les index. Le moteur injecte automatiquement un struct `Uniforms` et des helpers :
+
+- **Accès Uniformes** : Utilisez l'objet global `uniforms` (e.g. `uniforms.nx`, `uniforms.t`, `uniforms.p0..p7`).
+- **Lecture/Écriture Scalaire** : `read_faceName(x, y)` et `write_faceName(x, y, value)`.
+- **Multi-Composants (LBM/Vector)** : `read_faceName(x, y, d)` où `d` est l'indice du composant (0..26 pour D3Q27).
+- **Ping-Pong Dynamique** : `read_faceName_Now(x, y)` et `write_faceName_Next(x, y, val)`.
+- **Indexation Linéaire** : `getIndex(x, y)` (2D) et `getIndex3D(x, y, z)` (3D).
 
 ---
+
+## 3. Configuration des Boundary Roles
+Hypercube v5.0 Pro supporte des comportements de bordure avancés injectés dans les uniformes:
+- `leftRole`, `rightRole`, etc.
+- Valeurs : `1: Periodic`, `2: Wall (Bounce-Back)`, `3: Inflow`, `4: Outflow`.
 
 ## 3. Utilisation des Simulation Packs
 

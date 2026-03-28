@@ -16,7 +16,9 @@ walkthrough.md
 .agent_behavior.md
 
 # Build Context
-dist/
+# Build Context
+# dist/ is included! (We need this for consumers)
+# dist/
 # Optional: src/ is often included for source mapping, but we exclude it for a "clean" bundle
 # src/
 

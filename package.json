@@ -1,6 +1,6 @@
 {
   "name": "hypercube-gpu-core",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "Standalone high-performance WebGPU compute core (zero-copy MasterBuffer + declarative topology)",
   "type": "module",
   "main": "./dist/hypercube-gpu-core.js",
