@@ -25,3 +25,8 @@
 - **Isolation Vitest** : Exclure systématiquement les dossiers de rendu (`tests/renders/**`) de la configuration Vitest pour éviter les conflits entre les environnements Node.js et Navigateur/WebGPU.
 - **Conformité au Pont WebMCP** : Tout nouvel audit visuel (`.html`) doit impérativement inclure le boilerplate `fetch('http://localhost:3000', ...)` pour être compatible avec la suite d'audit automatisée.
 - **Documentation Manifeste** : Privilégier la création/mise à jour du `ARCHITECTURE.md` et des ADR (Architecture Decision Records) avec des visuels haute-fidélité pour documenter les choix structurants.
+
+## 7. Gestion de l'Historique (Memory Persistence)
+- **Consultation Obligatoire** : Avant toute action de versioning, l'agent DOIT consulter `.version_history.md`.
+- **Mise à Jour Systématique** : Après chaque commit important ou montée de version, l'agent DOIT noter le message de commit et la version dans ce fichier local (ignoré par Git).
+- **Sobriété et Précision** : Noter uniquement les versions réelles (Tags) et les messages de commit clés pour éviter le coût inutile en tokens des logs Git complets.

@@ -1,0 +1,35 @@
+# Hypercube GPU Core - NPM Exclusions
+# Keep the package small and focused on the core simulation logic.
+
+# Local Development & Housekeeping
+node_modules/
+.git/
+.github/
+.vscode/
+.DS_Store
+*.log
+perf_log.txt
+benchmark_results/
+walkthrough.md
+.version_history.md
+.agentrules
+.agent_behavior.md
+
+# Build Context
+dist/
+# Optional: src/ is often included for source mapping, but we exclude it for a "clean" bundle
+# src/
+
+# Infrastructure & Tooling
+vite.config.ts
+vitest.config.ts
+tsconfig.json
+package-lock.json
+
+# Test Suite & Documentation
+tests/
+scripts/
+samples/
+schemas/
+# docs/ (Optionally excluded, but often useful for developers installing the package)
+# docs/

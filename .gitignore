@@ -6,3 +6,6 @@ build
 perf_log.txt
 benchmark_results/
 walkthrough.md
+.version_history.md
+.agentrules
+.agent_behavior.md
