@@ -1,12 +1,8 @@
-# FDTD Maxwell Solver: Electromagnetics Implementation
+# FDTD Maxwell — Elite Guide v5.0.4
 
-Technical specification of the Finite-Difference Time-Domain (FDTD) solver for electromagnetic wave propagation.
+Technical specification of the Yee-algorithm engine for electromagnetic wave propagation.
 
 ## 1. Algorithmic Foundation
-The solver implements the **Yee Algorithm** for solving Maxwell's equations in the time domain. It utilizes a staggered grid approach where:
-- **Electric Field ($\vec{E}$)** and **Magnetic Field ($\vec{H}$)** are computed at alternating time steps (leapfrog integration).
-- Central difference approximations are applied to spatial and temporal derivatives, ensuring second-order accuracy.
-
 ## 2. Boundary Conditions: Absorbing Boundary Layers (ABC)
 To simulate open-space propagation within a finite computational domain, the engine utilizes **Absorbing Boundary Conditions (ABC)**:
 - **Sponge Layers**: A boundary region (typically 12-24 pixels) where field amplitudes are attenuated via a spatially varying conductivity profile.

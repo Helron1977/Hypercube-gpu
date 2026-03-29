@@ -120,9 +120,10 @@ export class MasterBuffer implements IMasterBuffer {
             }
         });
 
-        const stagingBuffers = copyTasks.map(t => this.device.createBuffer({
+        const stagingBuffers = copyTasks.map((t, i) => this.device.createBuffer({
             size: t.bytes,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+            label: `Staging Readback (${dataContract.descriptor.faces[faceIndices[Math.floor(i / (this.vGrid.chunks.length * (dataContract.getFaceMappings()[faceIndices[Math.floor(i / (this.vGrid.chunks.length))]]?.numSlots || 1))) ]]?.name || 'unknown'})`
         }));
 
         const encoder = this.device.createCommandEncoder();

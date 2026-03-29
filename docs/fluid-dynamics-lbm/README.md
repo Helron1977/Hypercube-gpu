@@ -1,12 +1,8 @@
-# Lattice Boltzmann Method (LBM) Implementation
+# Lattice Boltzmann Method (LBM) — Elite Guide v5.0.4
 
-Technical specification of the 2D fluid dynamics engine within the Hypercube GPU framework.
+Technical specification of the 2D/3D fluid dynamics engine within the Hypercube GPU framework.
 
 ## 1. Algorithmic Foundation
-The solver utilizes a **D2Q9 (2-dimensional, 9-velocity)** Lattice Boltzmann model with a **Bhatnagar-Gross-Krook (BGK)** collision operator. The simulation alternates between two primary kernels:
-- **Collision Phase**: Relaxation of the population distribution functions toward local equilibrium based on the macroscopic density ($\rho$) and velocity ($u$).
-- **Streaming Phase**: Advection of post-collision populations to adjacent lattice nodes.
-
 ### Hardware Implementation
 The implementation is optimized for WebGPU compute shaders (WGSL). Each lattice node is mapped to a GPU thread, leveraging high-bandwidth VRAM access patterns to minimize latency.
 

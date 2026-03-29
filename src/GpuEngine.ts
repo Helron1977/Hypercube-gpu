@@ -6,9 +6,12 @@ import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
 
 /**
  * High-level wrapper for a Hypercube GPU simulation.
+ * @typeparam TParams - The type of the simulation parameters (must be a record of numbers).
  */
-export class GpuEngine<TParams = any, TFaces = any> {
+export class GpuEngine<TParams extends Record<string, number> = any, TFaces = any> {
     private bufferPool: Map<string, Float32Array> = new Map();
+    private registeredKernels: Record<string, string> = {};
+    private persistentOverrides: Partial<TParams> = {};
 
     constructor(
         public readonly vGrid: IVirtualGrid<TParams>,
@@ -17,9 +20,43 @@ export class GpuEngine<TParams = any, TFaces = any> {
         public readonly parityManager: ParityManager
     ) {}
 
-    public async step(kernels: Record<string, string>, count: number = 1): Promise<void> {
-        for (let i = 0; i < count; i++) {
-            await this.dispatcher.dispatch(this.parityManager.currentTick, kernels);
+    /**
+     * Registers simulation kernels persistently.
+     * Once registered, step() can be called without passing source code.
+     */
+    public use(kernels: Record<string, string>): void {
+        this.registeredKernels = { ...this.registeredKernels, ...kernels };
+    }
+
+    /**
+     * Sets a persistent parameter override (e.g., 'viscosity', 'conductivity').
+     * These overrides are merged into every subsequent step.
+     */
+    public setParam(name: keyof TParams, value: number): void {
+        this.persistentOverrides[name] = value as any;
+    }
+
+    /**
+     * Executes one or more simulation steps.
+     * @param paramsOrCount Either the number of steps to run (number) or transient parameter overrides (TParams).
+     * @param kernels Optional transient kernels (overrides registered ones for this call).
+     */
+    public async step(paramsOrCount: TParams | number = 1, kernels?: Record<string, string>): Promise<void> {
+        const activeKernels = kernels || this.registeredKernels;
+        if (Object.keys(activeKernels).length === 0) {
+            throw new Error("GpuEngine: No kernels registered. Use engine.use() before calling step().");
+        }
+
+        if (typeof paramsOrCount === 'number') {
+            for (let i = 0; i < paramsOrCount; i++) {
+                // Apply persistent overrides during multi-step runs
+                await this.dispatcher.dispatch(this.parityManager.currentTick, activeKernels, this.persistentOverrides as TParams);
+                this.parityManager.increment();
+            }
+        } else {
+            // Merge transient overrides with persistent ones
+            const mergedParams = { ...this.persistentOverrides, ...paramsOrCount } as TParams;
+            await this.dispatcher.dispatch(this.parityManager.currentTick, activeKernels, mergedParams);
             this.parityManager.increment();
         }
     }
@@ -46,6 +83,23 @@ export class GpuEngine<TParams = any, TFaces = any> {
 
     public async syncFacesToHost(faces: (string | number)[]): Promise<void> {
         await this.buffer.syncFacesToHost(faces);
+    }
+
+    /**
+     * Elite Helper: Synchronizes a single face and returns its inner data (no ghosts).
+     * @param faceName The name of the face to retrieve.
+     */
+    public async getFace(faceName: string): Promise<Float32Array> {
+        await this.syncFacesToHost([faceName]);
+        const fullData = this.getFaceData('chunk_0_0_0', faceName);
+        
+        // If it's a scalar/reduction face (small length), return raw
+        const { nx, ny } = this.vGrid.dimensions;
+        if (fullData.length < nx * ny) {
+            return fullData;
+        }
+        
+        return this.getInnerFaceData('chunk_0_0_0', faceName);
     }
 
     public async syncToHost(): Promise<void> {

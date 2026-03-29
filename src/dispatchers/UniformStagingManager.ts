@@ -22,6 +22,7 @@ export class UniformStagingManager {
     private dispatchMetadata: ChunkDispatchMetadata[] = [];
     private bytesPerChunkAligned: number = 0;
     private topologyResolver: TopologyResolver = new TopologyResolver();
+    private paramNames: string[] = [];
 
     constructor(
         private vGrid: IVirtualGrid,
@@ -29,6 +30,12 @@ export class UniformStagingManager {
         private parityManager: ParityManager
     ) {
         this.bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(512);
+        
+        // Extract parameter order for semantic mapping
+        if (this.vGrid.config && this.vGrid.config.params) {
+            this.paramNames = Object.keys(this.vGrid.config.params);
+        }
+
         this.refreshMetadata();
     }
 
@@ -100,10 +107,28 @@ export class UniformStagingManager {
 
                 const configParams = this.vGrid.config.params || {};
                 for (let p = 0; p < 8; p++) {
-                    const key = `p${p}`;
-                    let val = (overrides && overrides[key] !== undefined) 
-                        ? overrides[key] 
-                        : (scheme.params && scheme.params[key] !== undefined) ? scheme.params[key] : configParams[key];
+                    const genericKey = `p${p}`;
+                    const semanticKey = this.paramNames[p]; // e.g., "conductivity"
+                    
+                    let val = 0;
+
+                    // Decision tree for parameter value:
+                    // 1. Overrides (semantic)
+                    // 2. Overrides (generic pX)
+                    // 3. Scheme params (pX or semantic)
+                    // 4. Config params (semantic)
+                    if (overrides && semanticKey && overrides[semanticKey] !== undefined) {
+                        val = overrides[semanticKey];
+                    } else if (overrides && overrides[genericKey] !== undefined) {
+                        val = overrides[genericKey];
+                    } else if (scheme.params) {
+                        if (semanticKey && scheme.params[semanticKey] !== undefined) val = scheme.params[semanticKey] as number;
+                        else if (scheme.params[genericKey] !== undefined) val = scheme.params[genericKey] as number;
+                        else if (semanticKey) val = configParams[semanticKey];
+                    } else if (semanticKey) {
+                        val = configParams[semanticKey];
+                    }
+
                     f32Data[base + 8 + p] = (typeof val === 'number') ? val : 0;
                 }
 
