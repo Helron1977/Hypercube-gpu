@@ -106,6 +106,7 @@ code { font-family: var(--font-mono); font-size: 13px; background: rgba(255,255,
   <button class="sn" onclick="go(3)">4 · WGSL Macros</button>
   <button class="sn" onclick="go(4)">5 · Diagnostic</button>
   <button class="sn" onclick="go(5)">6 · Audit Core</button>
+  <button class="sn" onclick="go(6)">7 · V5.0.4 Extensions</button>
 </div>
 
 <!-- PANEL 0 : vue d'ensemble -->
@@ -124,7 +125,7 @@ code { font-family: var(--font-mono); font-size: 13px; background: rgba(255,255,
   </div>
   <div class="card" style="padding:1rem;margin:0">
     <strong style="color:var(--accent)">3. engine.step()</strong><br>
-    <span style="font-size:13px;color:var(--text-secondary)">Exécution des Compute Shaders. Le Dispatcher gère automatiquement la parité et les offsets.</span>
+    <span style="font-size:13px;color:var(--text-secondary)">Exécution des Compute Shaders. Le Dispatcher gère automatiquement la parité, les offsets et les atomiques.</span>
   </div>
 </div>
 
@@ -132,9 +133,10 @@ code { font-family: var(--font-mono); font-size: 13px; background: rgba(255,255,
 
 <h3>Composants Fondamentaux</h3>
 <div class="card">
-  <div class="face-row"><code>GpuDispatcher</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Moteur de génération de macros WGSL et gestionnaire de dispatch.</span></div>
+  <div class="face-row"><code>GpuDispatcher</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Moteur de génération de macros WGSL (Standard + Atomic).</span></div>
   <div class="face-row"><code>DataContract</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Garant de l'intégrité de la mémoire et du mapping des faces.</span></div>
   <div class="face-row"><code>VirtualGrid</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Abstraction topologique (2D/3D) découpée en Chunks physiques.</span></div>
+  <div class="face-row"><code>MasterBuffer</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Gestionnaire de dual-buffer (Standard/Atomic) en VRAM.</span></div>
 </div>
 </div>
 
@@ -153,7 +155,7 @@ code { font-family: var(--font-mono); font-size: 13px; background: rgba(255,255,
 <div class="tab-content on" id="t-full">
 <pre>{
   "name": "Core Simulation Baseline",
-  "version": "5.0.2",
+  "version": "5.0.4",
 
   "engine": {
     "name": "UniversalEngine",
@@ -162,7 +164,7 @@ code { font-family: var(--font-mono); font-size: 13px; background: rgba(255,255,
     "faces": [
       { "name": "phi",  "type": "field",      "isPingPong": true, "isSynchronized": true },
       { "name": "f",    "type": "population", "numComponents": 9, "isSynchronized": true },
-      { "name": "obs",  "type": "mask",       "isReadOnly": true, "isSynchronized": false }
+      { "name": "e_sum","type": "atomic_f32", "isSynchronized": true }
     ],
 
     <span style="color:#888">// Physique : quels kernels WGSL tourner à chaque step</span>
@@ -204,9 +206,9 @@ const manifest = new SimulationBuilder('Universal Core')
   .withChunks(4, 2)
   .withEngineName('UniversalEngine')
   .withGhostCells(1)
-  .addFace('phi', 'field', true, true)
-  .addFace('f',   'population', 9, true)
-  .addFace('obs', 'mask', true, false)
+  .addFace('phi',   'field', true, true)
+  .addFace('f',     'population', 9, true)
+  .addFace('e_sum', 'atomic_f32', true)
   .addRule('collision', lbmKernelSource)
   .withParams({ tau: 0.55, ux0: 0.08 })
   .build();
@@ -246,10 +248,11 @@ const engine = await createSimulation(manifest);</pre>
 <!-- PANEL 2 : les faces -->
 <div class="panel" id="p2">
 <h2>Les Faces — la mémoire de ta simulation</h2>
-<p>Une face = une couche de données en VRAM. Chaque cellule de la grille a une valeur par face. Clique sur un type pour voir ce qu'il génère.</p>
+<p>Une face = une couche de données en VRAM. Chaque cellule de la grille a une valeur par face.</p>
 
 <div class="sel-row" id="face-sel">
   <button class="sel-btn on" onclick="showFace('scalar',this)">scalar</button>
+  <button class="sel-btn" onclick="showFace('atomic_f32',this)">atomic_f32</button>
   <button class="sel-btn" onclick="showFace('population',this)">population</button>
   <button class="sel-btn" onclick="showFace('field',this)">field</button>
   <button class="sel-btn" onclick="showFace('mask',this)">mask</button>
@@ -262,7 +265,7 @@ const engine = await createSimulation(manifest);</pre>
 <div class="card">
   <div class="face-row">
     <span style="font-size:13px;min-width:100px;font-weight:500">pingPong: false</span>
-    <span style="font-size:13px;color:var(--color-text-secondary)">Donnée lue et écrite dans le même buffer. OK pour obstacles, masques, macros dérivées (rho, ux).</span>
+    <span style="font-size:13px;color:var(--color-text-secondary)">Donnée lue et écrite dans le même buffer. OK pour obstacles, masques, atomiques.</span>
   </div>
   <div class="face-row">
     <span style="font-size:13px;min-width:100px;font-weight:500">pingPong: true</span>
@@ -270,16 +273,7 @@ const engine = await createSimulation(manifest);</pre>
   </div>
 </div>
 
-<h3>numComponents — pour les faces multi-scalaires</h3>
-<pre>{ "name": "f", "type": "population", "isSynchronized": true, <span class="hl">"numComponents": 9</span> }
-<span style="color:#888">// D2Q9 → 9 directions → 9 floats par cellule
-// D3Q19 → 19 composants → "numComponents": 19
-// Omis = déduit du type : scalar=1, vector=3, population=9</span></pre>
-
-<h3>numSlots — pour le triple buffering (wave)</h3>
-<pre>{ "name": "u", "type": "field", "isSynchronized": true, <span class="hl">"numSlots": 3</span> }
-<span style="color:#888">// Wave du 2nd ordre : besoin de t-1, t, t+1
-// numSlots: 3 → ParityManager gère le cycle modulo 3</span></pre>
+<div class="tip">Les faces atomiques héritent nativement de <code>pingPong: false</code> pour permettre l'accumulation inter-threads.</div>
 </div>
 
 <!-- PANEL 3 : WGSL & macros -->
@@ -291,60 +285,32 @@ const engine = await createSimulation(manifest);</pre>
 <pre><span style="color:#888">// Automatiquement injecté avant ton code :</span>
 
 struct Uniforms {
-  nx: u32,         <span style="color:#888">// colonnes (sans ghost cells)</span>
-  ny: u32,         <span style="color:#888">// lignes (sans ghost cells)</span>
-  strideRow: u32,  <span style="color:#888">// nx + 2*ghostCells</span>
-  physicalNy: u32, <span style="color:#888">// ny + 2*ghostCells</span>
-  t: u32,          <span style="color:#888">// tick courant (frame)</span>
-  tick: u32,       <span style="color:#888">// même chose (alias)</span>
-  p0..p7: f32,     <span style="color:#888">// tes params (tau=p0, ux0=p1...)</span>
+  nx: u32, ny: u32, strideRow: u32, physicalNy: u32,
+  t: u32, tick: u32,
+  p0..p7: f32,
   ...
 }
+@group(0) @binding(0) var&lt;storage, read_write&gt; data: array&lt;f32&gt;;
 @group(0) @binding(1) var&lt;uniform&gt; uniforms: Uniforms;
+@group(0) @binding(2) var&lt;storage, read_write&gt; dataAtomic: array&lt;atomic&lt;u32&gt;&gt;;
 
-<span style="color:#888">// Helpers d'indexation :</span>
-fn getIndex(x: u32, y: u32) -> u32
-fn getIndex3D(x: u32, y: u32, z: u32) -> u32
+<span style="color:#888">// Pour face atomique (Ex: 'flux' type 'atomic_f32') :</span>
+fn atomicAdd_flux(x: u32, y: u32, val: f32)
+fn atomicLoad_flux(x: u32, y: u32) -> f32
 
-<span style="color:#888">// Pour chaque face déclarée — ex: face "phi" field :</span>
+<span style="color:#888">// Pour face standard (Ex: 'phi') :</span>
 fn read_phi(x: u32, y: u32) -> f32
-fn write_phi(x: u32, y: u32, val: f32)
+fn write_phi(x: u32, y: u32, val: f32)</pre>
 
-<span style="color:#888">// Pour face multi-composante — ex: face "f" population :</span>
-fn read_f(x: u32, y: u32, d: u32) -> f32
-fn write_f(x: u32, y: u32, d: u32, val: f32)</pre>
+<div class="tip">v5.0.4 : Le support <code>atomicAdd</code> pour les floats est géré par une boucle CAS interne invisible pour l'utilisateur.</div>
 
 <h3>Correspondance params → WGSL</h3>
 <pre><span style="color:#888">// Dans le manifest :</span>
-"params": { "tau": 0.55, "ux0": 0.08, "reynolds": 1000 }
+"params": { "tau": 0.55, "ux0": 0.08 }
 
 <span style="color:#888">// Dans le WGSL :</span>
-let viscosity = uniforms.p0;   <span style="color:#888">// tau → p0 (ordre de déclaration)</span>
-let velocity  = uniforms.p1;   <span style="color:#888">// ux0 → p1</span>
-let custom    = uniforms.p2;   <span style="color:#888">// reynolds → p2</span></pre>
-
-<div class="warn">Les params sont mappés par ordre dans <code>params</code>, pas par nom. <code>tau</code> est toujours <code>p0</code> parce qu'il est déclaré en premier.</div>
-
-<h3>Kernel minimal complet</h3>
-<pre>const source = engine.getWgslHeader('compute') + `
-
-@compute @workgroup_size(16, 16)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-  let x = id.x; let y = id.y;
-  if (x >= uniforms.nx || y >= uniforms.ny) { return; }
-
-  // Init au tick 0
-  if (uniforms.tick == 0u) {
-    write_phi(x, y, 1.0);
-    return;
-  }
-
-  // Diffusion simple
-  let val = (read_phi(x+1, y) + read_phi(x-1, y) + read_phi(x, y+1) + read_phi(x, y-1)) * 0.25;
-  write_phi(x, y, val);
-}`;
-
-await engine.step({ 'compute': source });</pre>
+let viscosity = uniforms.p0;   <span style="color:#888">// tau</span>
+let velocity  = uniforms.p1;   <span style="color:#888">// ux0</span></pre>
 </div>
 
 <!-- PANEL 4 : lire les résultats -->
@@ -360,47 +326,19 @@ const storageBuffer = engine.buffer.gpuBuffer;
 const bindGroup = device.createBindGroup({
   layout: renderPipeline.getBindGroupLayout(0),
   entries: [{ binding: 0, resource: { buffer: storageBuffer } }]
-});
-<span style="color:#888">// → ton vertex shader lit rho/ux/uy directement en VRAM</span></pre>
+});</pre>
 
 <h3>Pattern B — sync partielle (diagnostic, UI)</h3>
 <p>Rapatrie seulement les faces nécessaires. Ne bloque pas le render loop.</p>
-<pre><span style="color:#888">// À appeler hors du render loop (setTimeout, 1×/seconde)</span>
-async function updateHUD() {
-  <span style="color:#888">// Sync seulement 'rho' — pas toute la VRAM</span>
+<pre>async function updateHUD() {
+  <span style="color:#888">// Sync seulement 'rho'</span>
   await engine.syncFacesToHost(['rho']);
-
-  <span style="color:#888">// Lecture SANS ghost cells (prête à itérer)</span>
   const rho = engine.getInnerFaceData('chunk_0_0_0', 'rho');
-
-  const avg = rho.reduce((a, b) => a + b, 0) / rho.length;
-  document.getElementById('density').textContent = avg.toFixed(4);
+  document.getElementById('density').textContent = rho[0].toFixed(4);
 }
 setTimeout(updateHUD, 1000);</pre>
 
-<h3>Pattern C — sync totale (export, debug)</h3>
-<pre><span style="color:#888">// Sync tout (lent — uniquement hors boucle)</span>
-await engine.syncToHost();
-const ux = engine.getInnerFaceData('chunk_0_0_0', 'ux');
-const uy = engine.getInnerFaceData('chunk_0_0_0', 'uy');
-
-<span style="color:#888">// Export CSV ou envoi serveur</span>
-const csv = Array.from(ux).map((v,i) => `${v},${uy[i]}`).join('\n');</pre>
-
-<h3>Réduction GPU (force, énergie totale)</h3>
-<pre><span style="color:#888">// Somme d'une face directement sur GPU — sans readback</span>
-const totalEnergy = await engine.reduceField('rho', 'chunk_0_0_0');
-
-<span style="color:#888">// Forces aérodynamiques (méthode Momentum Exchange)</span>
-const [Fx, Fy] = await engine.reduceForces('chunk_0_0_0');</pre>
-
-<h3>Trouver le chunkId</h3>
-<pre><span style="color:#888">// Convention : chunk_x_y_z (position dans la grille de chunks)</span>
-<span style="color:#888">// Grid 4×2 → chunks : chunk_0_0_0, chunk_1_0_0 ... chunk_3_1_0</span>
-<span style="color:#888">// Pour une grille 1×1 (un seul chunk) : toujours chunk_0_0_0</span>
-const data = engine.getInnerFaceData('chunk_0_0_0', 'rho');</pre>
-
-<div class="tip">Pour une simulation 256×128 en 4×2 chunks → la grille physique fait 64×64 cellules par chunk. <code>getInnerFaceData</code> te retourne un Float32Array de 64×64 = 4096 valeurs par chunk.</div>
+<div class="warn">L'accès aux faces atomiques via <code>getInnerFaceData</code> est identique aux faces standard. Le framework gère le remapping CPU.</div>
 </div>
 
 <!-- PANEL 5 : aquarium -->
@@ -408,63 +346,60 @@ const data = engine.getInnerFaceData('chunk_0_0_0', 'rho');</pre>
 <h2>Exemple complet — Universal Core</h2>
 <p>Le Core combine plusieurs systèmes qui partagent le même MasterBuffer. Voici comment le structurer.</p>
 
-<h3>Le manifest</h3>
-<pre>{
-  "name": "UniversalCore",
-  "version": "5.0.2",
-  "engine": {
-    "name": "UniversalEngine",
-    "version": "1.0.0",
-    "requirements": { "ghostCells": 1, "pingPong": true },
-    "faces": [
-      { "name": "phi",     "type": "field",      "isPingPong": true, "isSynchronized": true },
-      { "name": "f",       "type": "population", "numComponents": 9, "isSynchronized": true },
-      { "name": "obs",     "type": "mask",       "isReadOnly": true, "isSynchronized": false },
-      { "name": "agents",  "type": "scalar",     "numComponents": 4, "isSynchronized": false }
-    ],
-    "rules": [
-      { "type": "compute", "source": "" }
-    ]
-  },
-  "config": {
-    "dimensions": { "nx": 256, "ny": 128, "nz": 1 },
-    "chunks": { "x": 4, "y": 2, "z": 1 },
-    "engine": "UniversalEngine",
-    "boundaries": {
-      "left":   { "role": "periodic" },
-      "right":  { "role": "periodic" },
-      "top":    { "role": "wall" },
-      "bottom": { "role": "wall" }
-    },
-    "params": {
-      "tau":      0.55,
-      "ux0":      0.05,
-      "nAgents":  20
-    }
-  }
-}</pre>
-
 <h3>La boucle principale</h3>
-<pre>await engine.ready();
-
-const kernels = {
+<pre>const kernels = {
   'compute': engine.getWgslHeader('compute') + computeSource
 };
 
 async function loop() {
-  await engine.step(kernels, 1);
+  await engine.step(kernels);
   requestAnimationFrame(loop);
 }
-loop();
-
-setInterval(async () => {
-  await engine.syncFacesToHost(['phi']);
-  const data = engine.getInnerFaceData('chunk_0_0_0', 'phi');
-  render(data);
-}, 1000);</pre>
-
-<div class="tip">Les kernels tournent séquentiellement dans le même tick GPU. Les données sont immédiatement disponibles pour les kernels suivants dans le même step.</div>
+loop();</pre>
 </div>
+
+<!-- PANEL 6 : audit core -->
+<div class="panel" id="p6">
+<h2>Audit Core (SOTA)</h2>
+<p>Outils de validation de la physique et de l'intégrité numérique.</p>
+
+<div class="card">
+  <div class="face-row"><code>GeometricAligner</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Validation du bit-parity et des offsets de ghost cells.</span></div>
+  <div class="face-row"><code>StabilityAudit</code> <span style="color:var(--text-secondary);font-size:13px;margin-left:8px">Détection des divergences de masse et d'énergie en VRAM.</span></div>
+</div>
+</div>
+
+<!-- PANEL 7 : V5.0.4 EXTENSIONS -->
+<div class="panel" id="p7">
+<h2>Power User Extensions (v5.0.4)</h2>
+<p>Fonctionnalités avancées pour le couplage multi-physique et le pilotage temps réel.</p>
+
+<div class="flow" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:2rem 0">
+  <div class="card" style="margin:0">
+    <strong style="color:var(--accent)">1. Floating Point Atomics</strong><br>
+    <span style="font-size:13px;color:var(--text-secondary)">
+      Accumulation de forces ou d'énergie par face via Binding 2.
+      Injecte un CAS Loop automatique.
+    </span>
+    <div class="macro-box" style="margin-top:10px">atomicAdd_face(x, y, val)</div>
+  </div>
+  <div class="card" style="margin:0">
+    <strong style="color:var(--accent)">2. stepWithParams</strong><br>
+    <span style="font-size:13px;color:var(--text-secondary)">
+      Override dynamique des paramètres p0..p7 à chaque step pour le contrôle externe (PID, UI).
+    </span>
+    <pre style="margin-top:10px;font-size:11px">engine.step(kernels, { tau: 0.8 })</pre>
+  </div>
+</div>
+
+<h3>Ressources Externes</h3>
+<div class="flow" style="display:flex;flex-direction:column;gap:8px">
+  <a href="V5_EXTENSIONS.md" style="color:var(--accent);text-decoration:none;font-size:14px;border:1px solid var(--border);padding:15px;border-radius:4px;background:#050505" target="_blank">→ Guide Technique : Atomics & Plugins (v5.0.4)</a>
+  <a href="COOKBOOK_LBM.md" style="color:var(--accent);text-decoration:none;font-size:14px;border:1px solid var(--border);padding:15px;border-radius:4px;background:#050505" target="_blank">→ LBM Cookbook : Physique avancée</a>
+  <a href="CONTRIBUTOR_QUICKSTART.md" style="color:var(--accent);text-decoration:none;font-size:14px;border:1px solid var(--border);padding:15px;border-radius:4px;background:#050505" target="_blank">→ Contributor Quickstart : Étendre le noyau</a>
+</div>
+</div>
+
 </div>
 
 <script>
@@ -492,6 +427,15 @@ const faceData = {
       { m: 'write_phi(x, y, val)', n: 'Automatique (Next)' }
     ],
     json: '{ "name": "phi", "type": "scalar", "isSynchronized": true }'
+  },
+  atomic_f32: {
+    label: 'atomic_f32', color: 't-atomic',
+    desc: 'Support matériel Binding 2. Accumulation sécurisée inter-threads.',
+    macros: [
+      { m: 'atomicAdd_face(x, y, val)', n: 'Transparent Float accumulation' },
+      { m: 'atomicLoad_face(x, y) → f32', n: 'Atomic Loading' }
+    ],
+    json: '{ "name": "e_sum", "type": "atomic_f32", "isSynchronized": true }'
   },
   population: {
     label: 'population', color: 't-pop',
@@ -549,3 +493,6 @@ function showFace(type, btn) {
 }
 showFace('scalar', document.querySelector('.sel-btn'));
 </script>
+
+</body>
+</html>

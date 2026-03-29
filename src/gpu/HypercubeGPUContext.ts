@@ -165,6 +165,18 @@ export class HypercubeGPUContext {
         });
     }
 
+    static async loadKernel(url: string): Promise<string> {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(response.statusText);
+            }
+            return await response.text();
+        } catch (e: any) {
+            throw new Error(`Failed to load kernel from URL: ${e.message}`);
+        }
+    }
+
     static destroy() {
         this._state.device?.destroy();
         this._state.device = null;

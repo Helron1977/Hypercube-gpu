@@ -70,7 +70,7 @@ export class UniformStagingManager {
         }
     }
 
-    public updateStaging(t: number, rules: any[], faceMappings: any[]): void {
+    public updateStaging(t: number, rules: any[], faceMappings: any[], overrides?: Record<string, number>): void {
         const u32Data = this.stagingBuffer!;
         const f32Data = new Float32Array(u32Data.buffer);
         const maxRules = this.vGrid.config?.maxRules || 8;
@@ -101,7 +101,9 @@ export class UniformStagingManager {
                 const configParams = this.vGrid.config.params || {};
                 for (let p = 0; p < 8; p++) {
                     const key = `p${p}`;
-                    let val = (scheme.params && scheme.params[key] !== undefined) ? scheme.params[key] : configParams[key];
+                    let val = (overrides && overrides[key] !== undefined) 
+                        ? overrides[key] 
+                        : (scheme.params && scheme.params[key] !== undefined) ? scheme.params[key] : configParams[key];
                     f32Data[base + 8 + p] = (typeof val === 'number') ? val : 0;
                 }
 

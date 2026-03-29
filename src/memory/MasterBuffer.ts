@@ -10,6 +10,7 @@ import { MemoryLayout } from './MemoryLayout';
 export class MasterBuffer implements IMasterBuffer {
     public readonly rawBuffer: ArrayBuffer;
     public readonly gpuBuffer: GPUBuffer;
+    public readonly gpuAtomicBuffer?: GPUBuffer;
     public readonly layout: MemoryLayout;
     private chunkViews: Map<string, IPhysicalChunk> = new Map();
 
@@ -29,13 +30,23 @@ export class MasterBuffer implements IMasterBuffer {
             this.device = HypercubeGPUContext.device;
         }
         
+        // 1. Allouer le MasterBuffer Standard (Binding 0)
         this.gpuBuffer = this.device.createBuffer({
-            size: Math.ceil(this.layout.byteLength / 4) * 4,
+            size: Math.ceil(this.layout.standardByteLength / 4) * 4,
             usage: 0x0080 | 0x0008 | 0x0004, // STORAGE | COPY_DST | COPY_SRC
-            label: 'Hypercube Storage Buffer'
+            label: 'Hypercube Master Buffer (Float32)'
         });
-        this.rawBuffer = new ArrayBuffer(this.layout.byteLength);
 
+        // 2. Allouer le MasterBuffer Atomique SI nécessaire (Binding 2)
+        if (this.layout.atomicByteLength > 0) {
+            this.gpuAtomicBuffer = this.device.createBuffer({
+                size: Math.ceil(this.layout.atomicByteLength / 4) * 4,
+                usage: 0x0080 | 0x0008 | 0x0004, // STORAGE | COPY_DST | COPY_SRC
+                label: 'Hypercube Atomic Buffer (U32)'
+            });
+        }
+
+        this.rawBuffer = new ArrayBuffer(this.layout.byteLength);
         this.partitionMemory();
     }
 
@@ -56,7 +67,7 @@ export class MasterBuffer implements IMasterBuffer {
                 const numBuffers = face.numSlots;
                 
                 for (let b = 0; b < numBuffers; b++) {
-                    const offset = this.layout.getFaceOffset(i, fIdx, b);
+                    const offset = this.layout.getLogicalFaceOffset(i, fIdx, b);
                     const viewLength = face.numComponents * this.strideFace;
                     
                     const view = new Float32Array(this.rawBuffer, offset * 4, viewLength);
@@ -72,22 +83,8 @@ export class MasterBuffer implements IMasterBuffer {
     }
 
     public async syncToHost(): Promise<void> {
-        const size = this.byteLength;
-        const staging = HypercubeGPUContext.device.createBuffer({
-            size,
-            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-            label: 'Readback Staging'
-        });
-
-        const encoder = HypercubeGPUContext.device.createCommandEncoder();
-        encoder.copyBufferToBuffer(this.gpuBuffer, 0, staging, 0, size);
-        HypercubeGPUContext.device.queue.submit([encoder.finish()]);
-
-        await staging.mapAsync(GPUMapMode.READ);
-        const data = new Float32Array(staging.getMappedRange());
-        new Float32Array(this.rawBuffer).set(data);
-        staging.unmap();
-        staging.destroy();
+        // En v5.0.4, on synchronise les deux si présents
+        await this.syncFacesToHost(this.layout.faceMappings.map(f => f.name));
     }
 
     public async syncFacesToHost(faces: (string | number)[]): Promise<void> {
@@ -101,39 +98,44 @@ export class MasterBuffer implements IMasterBuffer {
             return f;
         });
 
-        const faceBytes: number[] = [];
-        const copyOffsetsBytes: number[] = [];
-        let runningOffsetBytes = 0;
+        const copyTasks: { source: GPUBuffer, gpuOffset: number, cpuOffset: number, bytes: number }[] = [];
         
-        faceIndices.forEach((fIdx, i) => {
+        faceIndices.forEach((fIdx) => {
             const faceMapping = dataContract.getFaceMappings()[fIdx];
             const numComponents = faceMapping.numComponents;
             const numBuffers = faceMapping.numSlots;
-            for (let b = 0; b < numBuffers; b++) {
-                const bytes = numComponents * this.strideFace * 4;
-                faceBytes.push(bytes);
-                const offsetFloats = this.layout.getFaceOffset(0, fIdx, b);
-                copyOffsetsBytes.push(offsetFloats * 4);
+            const binding = this.layout.getBinding(fIdx);
+            const sourceBuffer = (binding === 0) ? this.gpuBuffer : this.gpuAtomicBuffer;
+
+            if (!sourceBuffer) return;
+
+            for (let chunkIdx = 0; chunkIdx < this.vGrid.chunks.length; chunkIdx++) {
+                for (let b = 0; b < numBuffers; b++) {
+                    const bytes = numComponents * this.strideFace * 4;
+                    const gpuOffset = this.layout.getFaceOffset(chunkIdx, fIdx, b) * 4;
+                    const cpuOffset = this.layout.getLogicalFaceOffset(chunkIdx, fIdx, b) * 4;
+                    
+                    copyTasks.push({ source: sourceBuffer, gpuOffset, cpuOffset, bytes });
+                }
             }
         });
 
-        const stagingBuffers = copyOffsetsBytes.map((_, i) => HypercubeGPUContext.device.createBuffer({
-            size: faceBytes[i],
+        const stagingBuffers = copyTasks.map(t => this.device.createBuffer({
+            size: t.bytes,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
         }));
 
-        const encoder = HypercubeGPUContext.device.createCommandEncoder();
-        copyOffsetsBytes.forEach((offset, i) => {
-            encoder.copyBufferToBuffer(this.gpuBuffer, offset, stagingBuffers[i], 0, faceBytes[i]);
+        const encoder = this.device.createCommandEncoder();
+        copyTasks.forEach((task, i) => {
+            encoder.copyBufferToBuffer(task.source, task.gpuOffset, stagingBuffers[i], 0, task.bytes);
         });
 
-        HypercubeGPUContext.device.queue.submit([encoder.finish()]);
+        this.device.queue.submit([encoder.finish()]);
         await Promise.all(stagingBuffers.map(b => b.mapAsync(GPUMapMode.READ)));
 
-        copyOffsetsBytes.forEach((offset, i) => {
-            const data = new Float32Array(stagingBuffers[i].getMappedRange());
-            // Rapatriement effectif vers le RawBuffer (CPU)
-            const cpuView = new Float32Array(this.rawBuffer, offset, faceBytes[i] / 4);
+        copyTasks.forEach((task, i) => {
+            const data = new Uint8Array(stagingBuffers[i].getMappedRange());
+            const cpuView = new Uint8Array(this.rawBuffer, task.cpuOffset, task.bytes);
             cpuView.set(data);
             stagingBuffers[i].unmap();
             stagingBuffers[i].destroy();
@@ -142,10 +144,23 @@ export class MasterBuffer implements IMasterBuffer {
 
     public destroy(): void {
         if (this.gpuBuffer) this.gpuBuffer.destroy();
+        if (this.gpuAtomicBuffer) this.gpuAtomicBuffer.destroy();
     }
 
     public syncToDevice(): void {
-        HypercubeGPUContext.device.queue.writeBuffer(this.gpuBuffer, 0, new Uint8Array(this.rawBuffer));
+        // 1. Envoyer le buffer Standard
+        this.device.queue.writeBuffer(
+            this.gpuBuffer, 0, 
+            new Uint8Array(this.rawBuffer, 0, this.layout.standardByteLength)
+        );
+
+        // 2. Envoyer le buffer Atomique si présent
+        if (this.gpuAtomicBuffer) {
+            this.device.queue.writeBuffer(
+                this.gpuAtomicBuffer, 0, 
+                new Uint8Array(this.rawBuffer, this.layout.standardByteLength, this.layout.atomicByteLength)
+            );
+        }
     }
 
     public getChunkViews(chunkId: string): IPhysicalChunk {
