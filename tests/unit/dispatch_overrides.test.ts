@@ -46,7 +46,7 @@ describe('GpuDispatcher: Dynamic Parameter Overrides (TDD v5.0.4)', () => {
     };
 
     const vGrid = new VirtualGrid(config as any, descriptor as any);
-    const mockMB = { gpuBuffer: {}, strideFace: 1024, totalSlotsPerChunk: 10 } as any;
+    const mockMB = { gpuBuffer: {}, strideFace: 1024, totalSlotsPerChunk: 10, layout: { totalStandardSlotsPerChunk: 10 } } as any;
     const parity = new ParityManager(vGrid.dataContract);
 
     it('should override p0 when passed to dispatch()', async () => {

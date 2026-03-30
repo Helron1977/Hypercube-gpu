@@ -71,6 +71,7 @@
             lx = engine.buffer.layout.strideRow;
             L('[3/3] Loading fractal kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/MandelbulbCore.wgsl')).text();
+            engine.use({ 'MandelbulbCore': wgsl });
             running = true; lt = performance.now();
             L('✓ Volume rendering');
             requestAnimationFrame(tick);
@@ -83,11 +84,11 @@
             document.getElementById('valPower').innerText = power.toFixed(1);
             document.getElementById('valZ').innerText = pz;
 
-            engine.vGrid.config.params.p0 = 64; // nz
-            engine.vGrid.config.params.p1 = 20; // maxIter
-            engine.vGrid.config.params.p2 = power;
+            engine.params.p0 = 64; // nz
+            engine.params.p1 = 20; // maxIter
+            engine.params.p2 = power;
 
-            await engine.step({'MandelbulbCore': wgsl}, 1);
+            await engine.step(1);
 
             const faceIdx = engine.parityManager.getFaceIndices('fractal').base;
             await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {

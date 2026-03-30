@@ -1,6 +1,7 @@
 import { IVirtualGrid } from '../topology/GridAbstractions';
 import { MasterBuffer } from '../memory/MasterBuffer';
 import { PipelineCache } from './PipelineCache';
+import { WgslHeaderResult } from './WgslHeaderGenerator';
 
 /**
  * Handles the Halo (Ghost Cells) exchange pass for multi-chunk simulations.
@@ -17,14 +18,15 @@ export class HaloExchangePass {
         buffer: MasterBuffer,
         dispatchMetadata: any[],
         pipelineCache: PipelineCache,
-        getWgslHeader: (type: string) => string,
+        getWgslHeader: (type: string, source: string) => WgslHeaderResult,
         kernels: Record<string, string>,
         encoder: GPUCommandEncoder
     ): Promise<void> {
         const source = kernels['HaloExchange'];
         if (!source) return;
 
-        const pipeline = await pipelineCache.getPipeline(device, 'HaloExchange', source, getWgslHeader);
+        const metadata = await pipelineCache.getPipeline(device, 'HaloExchange', source, getWgslHeader);
+        const pipeline = metadata.pipeline;
         const transfers: any[] = [];
         const stride = buffer.strideFace;
         const numFaces = vGrid.dataContract.getFaceMappings().length;
@@ -92,12 +94,39 @@ export class HaloExchangePass {
         const passEncoder = encoder.beginComputePass();
         passEncoder.setPipeline(pipeline);
         
+        const entries: GPUBindGroupEntry[] = [
+            { binding: 0, resource: { buffer: buffer.gpuBuffer } }
+        ];
+
+        // Binding 2: Field Atomics (needed if Halo Exchange uses atomic operations)
+        if (metadata.usesAtomics && buffer.gpuAtomicBuffer) {
+            entries.push({ binding: 2, resource: { buffer: buffer.gpuAtomicBuffer } });
+        } else if (!metadata.usesAtomics) {
+            // Standard Halo uses Binding 2 for its transfer instructions if not using dataAtomic
+            const b = this.haloTransferBuffer;
+            if (b) entries.push({ binding: 2, resource: { buffer: b } });
+        }
+
+        // Binding 3: Global Workspace (if required by Halo kernel)
+        if (metadata.usesGlobals) {
+            const globals = vGrid.dataContract.getGlobalMappings();
+            if (globals.length > 0) {
+                const hasAtomic = globals.some(g => g.type.startsWith('atomic'));
+                const sourceBuffer = hasAtomic ? buffer.gpuAtomicBuffer : buffer.gpuBuffer;
+                const firstGlobalName = globals[0].name;
+                const globalOffset = buffer.layout.getGlobalOffset(firstGlobalName) * 4;
+                const globalSize = vGrid.dataContract.calculateGlobalBytes();
+                
+                entries.push({
+                    binding: 3,
+                    resource: { buffer: sourceBuffer, offset: globalOffset, size: Math.max(globalSize, 16) }
+                });
+            }
+        }
+        
         const bindGroup = device.createBindGroup({
             layout: pipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: buffer.gpuBuffer } },
-                { binding: 2, resource: { buffer: this.haloTransferBuffer } }
-            ]
+            entries
         });
         
         passEncoder.setBindGroup(0, bindGroup);
@@ -106,7 +135,8 @@ export class HaloExchangePass {
     }
 
     public destroy(): void {
-        if (this.haloTransferBuffer) this.haloTransferBuffer.destroy();
+        const b = this.haloTransferBuffer;
+        if (b) b.destroy();
         this.bindGroupCache.clear();
     }
 }

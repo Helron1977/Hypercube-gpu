@@ -28,7 +28,7 @@
             oldLog(...args);
         };
 
-        import { runConservationAudit } from './tests/validation/conservation_audit.ts';
+        import { runConservationAudit } from '../validation/conservation_audit.ts';
         
         async function start() {
             try {
@@ -39,9 +39,27 @@
                 } else {
                     document.getElementById('status').classList.add('error');
                 }
+
+                // Final Report to Autonomous Runner (port 3000)
+                try {
+                    await fetch('http://localhost:3000', {
+                        method: 'POST',
+                        headers: { 'X-Test-Name': 'conservation-audit' },
+                        body: document.getElementById('log').innerText
+                    });
+                } catch (err) {
+                    console.warn("Autonomous Runner not detected on port 3000.");
+                }
             } catch (e) {
                 console.error("Audit Runtime Error:", e);
                 document.getElementById('status').innerText = 'AUDIT FAILED';
+                try {
+                    await fetch('http://localhost:3000', {
+                        method: 'POST',
+                        headers: { 'X-Test-Name': 'conservation-audit' },
+                        body: document.getElementById('log').innerText + '\n\nAUDIT FAILED: ' + e.message
+                    });
+                } catch (err) { }
             }
         }
         

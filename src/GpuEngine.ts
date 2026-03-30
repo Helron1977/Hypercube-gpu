@@ -3,6 +3,7 @@ import { MasterBuffer } from './memory/MasterBuffer';
 import { GpuDispatcher } from './dispatchers/GpuDispatcher';
 import { ParityManager } from './ParityManager';
 import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
+import { WgslHeaderResult } from './dispatchers/WgslHeaderGenerator';
 
 /**
  * High-level wrapper for a Hypercube GPU simulation.
@@ -12,13 +13,31 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
     private bufferPool: Map<string, Float32Array> = new Map();
     private registeredKernels: Record<string, string> = {};
     private persistentOverrides: Partial<TParams> = {};
+    public readonly params: TParams & { set: (name: keyof TParams, value: number) => GpuEngine<TParams, TFaces>['params'] };
 
     constructor(
         public readonly vGrid: IVirtualGrid<TParams>,
         public readonly buffer: MasterBuffer,
         public readonly dispatcher: GpuDispatcher,
         public readonly parityManager: ParityManager
-    ) {}
+    ) {
+        // Fluent & Proxy Params Controller
+        this.params = new Proxy(this.persistentOverrides, {
+            get: (target, prop) => {
+                if (prop === 'set') {
+                    return (name: keyof TParams, value: number) => {
+                        this.setParam(name, value);
+                        return this.params;
+                    };
+                }
+                return (target as any)[prop];
+            },
+            set: (target, prop, value) => {
+                this.setParam(prop as any, value);
+                return true;
+            }
+        }) as any;
+    }
 
     /**
      * Registers simulation kernels persistently.
@@ -69,7 +88,7 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
         await this.dispatcher.dispatch(this.parityManager.currentTick, kernels);
     }
 
-    public getWgslHeader(ruleType: string): string {
+    public getWgslHeader(ruleType: string): WgslHeaderResult {
         return this.dispatcher.getWgslHeader(ruleType);
     }
 
@@ -86,12 +105,29 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
     }
 
     /**
+     * Contextual v6.0 SOTA: Synchronizes only the Simulation Globals (Binding 3) from GPU to Host.
+     * @deprecated Use getGlobal() which leverages Direct-Read Manifest Architecture (v9).
+     */
+    public async syncGlobalsToHost(): Promise<void> {
+        // No-op for v9 Direct-Read Architecture
+    }
+
+    /**
+     * High-level API to retrieve a simulation-wide contextual variable.
+     * V9: Direct-Read Architecture handles async GPU mapping without host pollution.
+     */
+    public async getGlobal(name: string): Promise<Float32Array | Int32Array> {
+        return this.buffer.readGlobalData(name);
+    }
+
+    /**
      * Elite Helper: Synchronizes a single face and returns its inner data (no ghosts).
      * @param faceName The name of the face to retrieve.
      */
-    public async getFace(faceName: string): Promise<Float32Array> {
+    public async getFace(faceName: string, parity?: number): Promise<Float32Array> {
+        const resolvedParity = parity !== undefined ? parity : this.parityManager.getFaceIndices(faceName).read;
         await this.syncFacesToHost([faceName]);
-        const fullData = this.getFaceData('chunk_0_0_0', faceName);
+        const fullData = this.getFaceData('chunk_0_0_0', faceName, resolvedParity);
         
         // If it's a scalar/reduction face (small length), return raw
         const { nx, ny } = this.vGrid.dimensions;
@@ -111,7 +147,8 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
      * Useful for direct injection into rendering engines (Three.js, etc.)
      */
     public getInnerFaceData(chunkId: string, faceName: string, parity?: number): Float32Array {
-        const fullData = this.getFaceData(chunkId, faceName, parity);
+        const resolvedParity = parity !== undefined ? parity : this.parityManager.getFaceIndices(faceName).read;
+        const fullData = this.getFaceData(chunkId, faceName, resolvedParity);
         const ghosts = this.vGrid.config.engine === 'test-engine' ? 1 : (this.vGrid.dataContract.descriptor.requirements.ghostCells || 0); 
         
         if (ghosts === 0) return fullData;
@@ -169,11 +206,12 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
 
     /**
      * Measures aerodynamic forces using the Momentum Exchange Method (MEM).
-     * @returns [Fx, Fy] in lattice units.
+     * Now uses the dedicated Global Workspace for zero-waste retrieval.
      */
-    public async reduceForces(source: string): Promise<[number, number]> {
-        const results = await this.dispatcher.reduce('Forces', source, undefined, 2);
-        return [results[0], results[1]];
+    public async reduceForces(): Promise<[number, number]> {
+        const results = await this.getGlobal('forces');
+        const scale = (results instanceof Int32Array) ? (this.persistentOverrides.p7 || 1e9) : 1.0;
+        return [results[0] / scale, results[1] / scale];
     }
 
     public syncToDevice(): void {

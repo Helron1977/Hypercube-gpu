@@ -76,9 +76,8 @@ describe('SOTA Phase 9: Thermal Flux & Gradient Audit', () => {
         engine.setFaceData('chunk_0_0_0', 't', tInitial, true);
 
         // 2. Converge for 1000 steps
-        for(let s=0; s<10; s++) { // 1000 in real SOTA
-            await engine.step(kernels);
-        }
+        engine.use(kernels);
+        await engine.step(10);
 
         await engine.syncFacesToHost(['t']);
         const tFinal = engine.getFaceData('chunk_0_0_0', 't');

@@ -46,7 +46,8 @@
                 const lbmSource = await respCore.text();
                 
                 // --- INITIALISATION : On laisse le kernel LBM faire son auto-init à tick=0 ---
-                await engine.step({ 'LbmInit': lbmSource });
+                engine.use({ 'LbmInit': lbmSource });
+                await engine.step(1);
                 
                 // On informe le dispatcher/kernel qu'on veut réduire la face d'index 3 (rho)
                 engine.vGrid.config.params.p0 = 3;
@@ -56,8 +57,9 @@
 
                 const start = performance.now();
                 const steps = 1000;
+                engine.use({ 'LbmAudit': lbmSource });
                 for(let i=0; i<steps; i++) {
-                    await engine.step({ 'LbmAudit': lbmSource });
+                    await engine.step(1);
                 }
                 const end = performance.now();
 
@@ -88,8 +90,7 @@
                    log(" (Reporting CLI désactivé/absent) ");
                 }
 
-                log("AUDIT_COMPLETE. CLOSING...", true);
-                setTimeout(() => window.close(), 1000);
+                log("AUDIT_COMPLETE.", true);
 
             } catch (err) {
                 log(`FATAL_ERROR: ${err.message}`, true);

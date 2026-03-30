@@ -37,11 +37,11 @@ describe('Hypercube v5.0 Macro System & API', () => {
         requirements: { ghostCells: 1, pingPong: true },
         faces: [
             { name: 'scalar', type: 'scalar', isSynchronized: true },
-            { name: 'pp', type: 'population', isSynchronized: true, isPingPong: true },
+            { name: 'pp', type: 'population', isSynchronized: true },
             { name: 'wave', type: 'scalar', isSynchronized: true, numSlots: 3 }
         ],
         rules: [
-            { type: 'Update', faces: ['scalar.read', 'scalar.write', 'pp', 'wave.now', 'wave.old', 'wave.next'] }
+            { type: 'Update', faces: ['scalar.now', 'scalar.next', 'pp', 'wave.now', 'wave.old', 'wave.next'] }
         ]
     };
 
@@ -58,6 +58,7 @@ describe('Hypercube v5.0 Macro System & API', () => {
         gpuBuffer: {}, 
         strideFace: 1024, 
         totalSlotsPerChunk: 10,
+        layout: { totalStandardSlotsPerChunk: 10 },
         getFaceData: () => new Float32Array(1024),
         setFaceData: vi.fn(),
         syncFacesToHost: vi.fn()
@@ -65,26 +66,18 @@ describe('Hypercube v5.0 Macro System & API', () => {
     
     const parity = new ParityManager(vGrid.dataContract);
 
-    it('GpuDispatcher: should generate professional macros for explicit faces', () => {
+    it('GpuDispatcher: should generate professional macros for explicit faces (v6 Naming)', () => {
         const dispatcher = new GpuDispatcher(vGrid, mockMB, parity, mockDevice as any);
-        const header = dispatcher.getWgslHeader('Update');
+        const { code: header } = dispatcher.getWgslHeader('Update');
 
-        // Check 2D Macros
-        expect(header).toContain('fn read_scalar_Read');
-        expect(header).toContain('fn write_scalar_Write');
-        expect(header).toContain('fn read_pp');
-        expect(header).toContain('fn write_pp');
+        // Check 2D Macros (V6 Nomenclature Now/Next)
+        expect(header).toContain('fn read_scalar_Now');
+        expect(header).toContain('fn write_scalar_Next');
+        expect(header).toContain('fn read_pp_Now');
+        expect(header).toContain('fn write_pp_Next');
         
-        // Check Unified 3D-Compatible Macros (v5.0.2 uses unified read_ prefix)
-        expect(header).toContain('fn read_scalar_Read');
-        
-        // Check Ping-Pong secondary macros
-        expect(header).toContain('fn read_pp');
-        expect(header).toContain('fn write_scalar_Write');
-        
-        // Check mapping logic (inlined in v5.0.2 for robustness)
-        // LOCK-IN: Macro logic for component addressing (d) using plane-stride (v5.0.2)
-        expect(header).toContain('u32(d)) * uniforms.strideFace + (y + uniforms.ghosts) * uniforms.strideRow + (x + uniforms.ghosts)');
+        // Check mapping logic (inlined for robustness)
+        expect(header).toContain('uniforms.strideFace + getIndex(x, y)');
         expect(header).toContain('fn getIndex3D');
     });
 

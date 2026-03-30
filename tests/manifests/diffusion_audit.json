@@ -14,7 +14,7 @@
       { "name": "t", "type": "field", "isSynchronized": true }
     ],
     "rules": [
-      { "type": "DiffusionCore", "source": "/src/kernels/wgsl/DiffusionCore.wgsl", "faces": ["t.read", "t.write"] }
+      { "type": "DiffusionCore", "source": "/src/kernels/wgsl/DiffusionCore.wgsl", "faces": [] }
     ]
   }
 }

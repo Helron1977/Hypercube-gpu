@@ -72,7 +72,8 @@ describe('Tensor-CP Model Verification', () => {
         const kernelSrc = fs.readFileSync(path.join(__dirname, '../../src/kernels/wgsl', 'TensorCpCore.wgsl'), 'utf-8');
 
         // This test validates that the engine can accept the Tensor-CP rules
-        await engine.step({ 'TensorCpCore': kernelSrc }, 1);
+        engine.use({ 'TensorCpCore': kernelSrc });
+        await engine.step(1);
         
         expect(engine.parityManager.currentTick).toBe(1);
     });

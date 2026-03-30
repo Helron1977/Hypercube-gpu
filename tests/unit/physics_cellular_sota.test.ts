@@ -72,9 +72,8 @@ describe('SOTA Physics Audit: Cellular Automata Determinism', () => {
         engine.setFaceData('chunk_0_0_0', 'life0', life0, true);
 
         // Run 2 steps: should return to original if B3/S23 is bit-perfect
-        for(let step=0; step<2; step++) {
-            await engine.step(kernels);
-        }
+        engine.use(kernels);
+        await engine.step(2);
 
         await engine.syncFacesToHost(['life0']);
         const result = engine.getFaceData('chunk_0_0_0', 'life0');

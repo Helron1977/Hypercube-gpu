@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Hypercube - Aerodynamic Force Audit (MEM) [GOLD]</title>
+    <title>Hypercube - Aerodynamic Force Audit (MEM) [v6.0 SOTA]</title>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -107,7 +107,7 @@
             <div>STEP: <b id="val-step">0</b></div>
         </div>
         <div class="log" id="log"></div>
-        <div style="color: #333; font-size: 10px;">HYPERCUBE GPU CORE v4.8.0<br>WEB-MCP ARCHITECTURE ENABLED</div>
+        <div style="color: #333; font-size: 10px;">HYPERCUBE GPU CORE v6.0 Alpha<br>GLOBAL WORKSPACE ENABLED</div>
     </div>
 
     <div class="main">
@@ -120,7 +120,6 @@
     <script type="module">
         import { GpuCoreFactory } from '/src/GpuCoreFactory.ts';
         import { WebMcpAdapter } from '/src/WebMcpAdapter.ts';
-        import { Aerodynamics } from '/tests/validation/Aerodynamics.ts';
 
         async function loadKernels() {
             const ts = Date.now();
@@ -173,76 +172,48 @@
 
         const canvas = document.getElementById('viz');
         const ctx = canvas.getContext('2d');
-        // Configuration du rendu (ajustable en console : window.vizScale = 20000)
         const vizConfig = {
             scale: 60000.0,
             rMax: 255,
             bMax: 255,
             gamma: 0.6, 
-            threshold: 0.12, // Zone neutre
-            levels: 8,       // Nombre d'isolines (contours)
+            threshold: 0.12, 
+            levels: 8,       
             obstacleColor: [40, 40, 45]
         };
 
-        /**
-         * Nucléon 4.0 : Standard Industriel (Contours / Isolines)
-         * Simule le rendu des outils de post-processing type ParaView ou Ansys Fluent.
-         */
         function applyScientificPalette(val, ptr, dataPtr, isObstacle) {
             if (isObstacle) {
                 dataPtr[ptr+0]=vizConfig.obstacleColor[0]; dataPtr[ptr+1]=vizConfig.obstacleColor[1]; 
                 dataPtr[ptr+2]=vizConfig.obstacleColor[2]; dataPtr[ptr+3]=255; return;
             }
-
             const absVal = Math.abs(val) / 255;
             if (absVal < vizConfig.threshold) {
                 dataPtr[ptr+0]=255; dataPtr[ptr+1]=255; dataPtr[ptr+2]=255; dataPtr[ptr+3]=255;
                 return;
             }
-
             const normalized = (absVal - vizConfig.threshold) / (1.0 - vizConfig.threshold);
             let d = Math.pow(normalized, vizConfig.gamma) * 255;
-
-            // --- Logique d'Isolines (Contours) ---
-            // On crée un effet de "cliquet" ou de ligne sombre à intervalles réguliers
             const levelIdx = normalized * vizConfig.levels;
             const fraction = levelIdx % 1.0;
-            const isContour = (fraction < 0.08); // Largeur de la ligne de contour
-
+            const isContour = (fraction < 0.08); 
             let r, g, b;
-            if (val > 0) {
-                r = 255; g = 255 - d; b = 255 - d;
-            } else {
-                r = 255 - d; g = 255 - d; b = 255;
-            }
-
-            // Assombrir si c'est une isoline
-            if (isContour) {
-                r *= 0.85; g *= 0.85; b *= 0.85;
-            }
-
-            dataPtr[ptr + 0] = r;
-            dataPtr[ptr + 1] = g;
-            dataPtr[ptr + 2] = b;
-            dataPtr[ptr + 3] = 255;
+            if (val > 0) { r = 255; g = 255 - d; b = 255 - d; } else { r = 255 - d; g = 255 - d; b = 255; }
+            if (isContour) { r *= 0.85; g *= 0.85; b *= 0.85; }
+            dataPtr[ptr + 0] = r; dataPtr[ptr + 1] = g; dataPtr[ptr + 2] = b; dataPtr[ptr + 3] = 255;
         }
 
-        function drawViz(engine, data, nx, ny) {
+        async function drawViz(engine, data, nx, ny) {
             if (canvas.width !== nx) { canvas.width = nx; canvas.height = ny; }
             const imgData = ctx.createImageData(nx, ny);
             const dataPtr = imgData.data;
-            const strideRow = (nx + 2);
-            const scale = window.vizScale || vizConfig.scale;
-
-            // On récupère le masque d'obstacle pour le rendu solide
-            const mask = engine.getFaceData('chunk_0_0_0', 'obstacle');
-
+            const mask = await engine.getFace('obs');
             for (let y = 0; y < ny; y++) {
                 for (let x = 0; x < nx; x++) {
-                    const idx = (y + 1) * strideRow + (x + 1);
-                    const val = data[idx] * scale;
+                    const idx = y * nx + x;
+                    const val = data[idx] * (window.vizScale || vizConfig.scale);
                     const isObstacle = mask[idx] > 0.5;
-                    const ptr = (y * nx + x) * 4;
+                    const ptr = idx * 4;
                     applyScientificPalette(val, ptr, dataPtr, isObstacle);
                 }
             }
@@ -255,22 +226,27 @@
                 const kernels = await loadKernels();
 
                 const NX = 512, NY = 128, U = 0.05, D = 16.0;
+                const CALIBRATION = -1.0 / 14.62;
                 const Re = 100.0, nu = (U * D) / Re;
                 const omega = 1.0 / (3.0 * nu + 0.5);
 
                 const descriptor = {
                     name: 'lbm-aero',
                     faces: [
-                        { name: 'obstacle', type: 'scalar', isReadOnly: true },
-                        { name: 'ux', type: 'scalar', isSynchronized: true, isPingPong: false },
-                        { name: 'uy', type: 'scalar', isSynchronized: true, isPingPong: false },
-                        { name: 'rho', type: 'scalar', isSynchronized: true, isPingPong: false },
-                        { name: 'curl', type: 'scalar', isSynchronized: true, isPingPong: false },
-                        { name: 'f', type: 'population', isSynchronized: true, isPingPong: true }
+                        { name: 'obs', type: 'scalar', isReadOnly: true },
+                        { name: 'ux', type: 'scalar', isSynchronized: true },
+                        { name: 'uy', type: 'scalar', isSynchronized: true },
+                        { name: 'rho', type: 'scalar', isSynchronized: true },
+                        { name: 'curl', type: 'scalar', isSynchronized: true },
+                        { name: 'f', type: 'population', isSynchronized: true }
+                    ],
+                    globals: [
+                        { name: 'forces', type: 'atomic_i32', count: 2 }
                     ],
                     rules: [
-                        { type: 'lbm', source: '', params: { p0: omega, p1: U } },
-                        { type: 'vorticity', source: '', params: {} }
+                        { type: 'lbm', source: '' },
+                        { type: 'vorticity', source: '' },
+                        { type: 'forces', source: '' }
                     ],
                     requirements: { ghostCells: 1, pingPong: true }
                 };
@@ -283,16 +259,7 @@
                     params: {}
                 }, descriptor);
 
-                // Diagnostic Instrumentation (Layer 3)
-                engine.dispatcher.device.addEventListener('uncapturederror', (e) => {
-                    log('🔥 GPU ERROR: ' + e.error.message);
-                    console.error('WebGPU Validation Error:', e.error);
-                });
-
-                // Expose WebMCP
-                const mcp = new WebMcpAdapter(engine);
                 window.engine = engine;
-                window.mcp = mcp;
 
                 // Setup Cylinder
                 const mask = new Float32Array((NX + 2) * (NY + 2));
@@ -301,37 +268,34 @@
                     const dx = x - cx, dy = y - cy;
                     if (dx * dx + dy * dy <= r2) mask[y * (NX + 2) + x] = 1.0;
                 }
-                engine.setFaceData('chunk_0_0_0', 'obstacle', mask);
+                engine.setFaceData('chunk_0_0_0', 'obs', mask);
                 engine.syncToDevice();
 
+                engine.use({ lbm: kernels.lbm, vorticity: kernels.vor, forces: kernels.red });
+
                 log('✓ Engine Build Complete');
-                log('✓ WebMCP Adapter Ready (window.mcp)');
+                log('✓ Global Workspace Enabled (Binding 3)');
                 log('✓ Obstacle Mask Injected');
                 log('▶ Starting Scientific Audit...');
 
                 document.getElementById('status').innerText = 'RUNNING';
                 document.getElementById('status').className = 'success';
 
-                const CALIBRATION = -1.0 / 14.62;
+                engine.params.p0 = omega;
+                engine.params.p1 = U;
+                engine.params.p7 = 1e9; // Global precision scale
 
                 for (let s = 1; s <= 10000; s++) {
-                    await engine.step({ lbm: kernels.lbm, vorticity: kernels.vor });
+                    await engine.step(1);
 
                     if (s % 20 === 0) {
-                        await engine.syncFacesToHost(['curl']);
-                        const curlData = engine.getFaceData('chunk_0_0_0', 'curl');
+                        const curlData = await engine.getFace('curl');
+                        await drawViz(engine, curlData, NX, NY);
 
-                        let maxC = 0;
-                        for (let i = 0; i < 1000; i++) if (Math.abs(curlData[i]) > maxC) maxC = Math.abs(curlData[i]);
-                        if (s % 100 === 0) console.log(`Step ${s}: Max Curl Sample=${maxC.toExponential(2)}`);
-
-                        drawViz(engine, curlData, NX, NY);
-
-                        const [fx_raw, fy_raw] = await engine.reduceForces(kernels.red);
-                        const fx = fx_raw; // Déjà normalisé par le dispatcher (p7=1e9)
-                        const fy = fy_raw;
-                        const cd = (2.0 * fx * CALIBRATION) / (1.0 * U * U * D);
-                        const cl = (2.0 * fy * CALIBRATION) / (1.0 * U * U * D);
+                        // DIRECT GLOBAL RETRIEVAL (v6.0 SOTA)
+                        const [fx_raw, fy_raw] = await engine.reduceForces();
+                        const cd = (2.0 * fx_raw * CALIBRATION) / (1.0 * U * U * D);
+                        const cl = (2.0 * fy_raw * CALIBRATION) / (1.0 * U * U * D);
 
                         cdHistory.push(cd);
                         clHistory.push(cl);
@@ -341,9 +305,9 @@
                         document.getElementById('val-cl').innerText = cl.toFixed(6);
                         document.getElementById('val-step').innerText = s;
 
-                        if (s % 1000 === 0) log(`✓ Reached Step ${s}`);
-                        await new Promise(r => setTimeout(r, 0));
+                        if (s % 1000 === 0) log(`✓ Step ${s}: Cd=${cd.toFixed(4)} Cl=${cl.toFixed(4)}`);
                     }
+                    await new Promise(r => setTimeout(r, 0));
                 }
 
                 log('✓ Audit Complete');

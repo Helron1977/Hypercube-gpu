@@ -73,12 +73,10 @@ describe('SOTA Physics Audit: JFA Distance Precision', () => {
         engine.setFaceData('chunk_0_0_0', 'uv0', uv0);
 
         // 2. Perform JFA steps (halving)
-        // In this unit test with mock, it won't actually compute.
-        // But the structure is ready for Real GPU verification.
+        engine.use(kernels);
         const jumpSizes = [32, 16, 8, 4, 2, 1];
         for(const k of jumpSizes) {
-            descriptor.rules![0].params!.p0 = k;
-            await engine.step(kernels);
+            await engine.step({ p0: k } as any);
         }
 
         await engine.syncFacesToHost(['uv1']);

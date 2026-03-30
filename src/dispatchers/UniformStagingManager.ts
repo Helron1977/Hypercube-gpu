@@ -3,6 +3,7 @@ import { MasterBuffer } from '../memory/MasterBuffer';
 import { ParityManager } from '../ParityManager';
 import { HypercubeGPUContext } from '../gpu/HypercubeGPUContext';
 import { TopologyResolver, ResolvedTopology } from '../topology/TopologyResolver';
+import { UniformLayoutValues } from './UniformLayout';
 
 interface ChunkDispatchMetadata {
     vChunk: VirtualChunk;
@@ -15,6 +16,7 @@ interface ChunkDispatchMetadata {
 
 /**
  * Manages Uniform buffers and staging for GpuDispatcher.
+ * v6.0: Optimized for decoupled Standard/Atomic layouts and Binding 3 support.
  */
 export class UniformStagingManager {
     public uniformBuffer?: GPUBuffer;
@@ -41,16 +43,17 @@ export class UniformStagingManager {
 
     public refreshMetadata(): void {
         const strideFace = this.buffer.strideFace;
-        const totalSlots = this.buffer.totalSlotsPerChunk;
+        // v6.0 FIX: Standard buffer size must ONLY account for Standard slots.
+        const standardSlotsPerChunk = this.buffer.layout.totalStandardSlotsPerChunk;
         const maxRules = this.vGrid.config?.maxRules || 8;
 
-        this.dispatchMetadata = this.vGrid.chunks.map((vChunk, i) => {
+        this.dispatchMetadata = this.vGrid.chunks.map((vChunk: VirtualChunk, i: number) => {
             const gid = vChunk.y * this.vGrid.chunkLayout.x + vChunk.x;
             return {
                 vChunk,
                 uniformOffset: i * maxRules * this.bytesPerChunkAligned,
-                dataOffset: gid * totalSlots * strideFace * 4,
-                dataSize: totalSlots * strideFace * 4,
+                dataOffset: gid * standardSlotsPerChunk * strideFace * 4,
+                dataSize: standardSlotsPerChunk * strideFace * 4,
                 globalIdx: gid,
                 topology: this.topologyResolver.resolve(vChunk, this.vGrid.chunkLayout, this.vGrid.config.boundaries)
             };
@@ -95,79 +98,54 @@ export class UniformStagingManager {
                 const layoutStrideRow = this.buffer.layout?.strideRow || (dim.nx + (ghosts * 2));
                 const layoutPhysicalNy = dim.ny + (ghosts * 2);
 
-                u32Data[base + 0] = dim.nx;
-                u32Data[base + 1] = dim.ny;
-                u32Data[base + 2] = layoutStrideRow;
-                u32Data[base + 3] = Math.floor(layoutPhysicalNy);
+                u32Data[base + UniformLayoutValues.NX] = dim.nx;
+                u32Data[base + UniformLayoutValues.NY] = dim.ny;
+                u32Data[base + UniformLayoutValues.STRIDE_ROW] = layoutStrideRow;
+                u32Data[base + UniformLayoutValues.PHYSICAL_NY] = Math.floor(layoutPhysicalNy);
 
-                f32Data[base + 4] = t;
-                u32Data[base + 5] = this.parityManager.currentTick;
-                u32Data[base + 6] = strideFace;
-                u32Data[base + 7] = faceMappings.length;
+                f32Data[base + UniformLayoutValues.T] = t;
+                u32Data[base + UniformLayoutValues.TICK] = this.parityManager.currentTick;
+                u32Data[base + UniformLayoutValues.STRIDE_FACE] = strideFace;
+                u32Data[base + UniformLayoutValues.NUM_FACES] = faceMappings.length;
 
+                // Parameters mapping
                 const configParams = this.vGrid.config.params || {};
                 for (let p = 0; p < 8; p++) {
                     const genericKey = `p${p}`;
-                    const semanticKey = this.paramNames[p]; // e.g., "conductivity"
-                    
+                    const semanticKey = this.paramNames[p];
                     let val = 0;
-
-                    // Decision tree for parameter value:
-                    // 1. Overrides (semantic)
-                    // 2. Overrides (generic pX)
-                    // 3. Scheme params (pX or semantic)
-                    // 4. Config params (semantic)
-                    if (overrides && semanticKey && overrides[semanticKey] !== undefined) {
-                        val = overrides[semanticKey];
-                    } else if (overrides && overrides[genericKey] !== undefined) {
-                        val = overrides[genericKey];
-                    } else if (scheme.params) {
+                    if (overrides && semanticKey && overrides[semanticKey] !== undefined) val = overrides[semanticKey];
+                    else if (overrides && overrides[genericKey] !== undefined) val = overrides[genericKey];
+                    else if (scheme.params) {
                         if (semanticKey && scheme.params[semanticKey] !== undefined) val = scheme.params[semanticKey] as number;
                         else if (scheme.params[genericKey] !== undefined) val = scheme.params[genericKey] as number;
                         else if (semanticKey) val = configParams[semanticKey];
-                    } else if (semanticKey) {
-                        val = configParams[semanticKey];
-                    }
-
-                    f32Data[base + 8 + p] = (typeof val === 'number') ? val : 0;
+                    } else if (semanticKey) val = configParams[semanticKey];
+                    f32Data[base + UniformLayoutValues.PARAMS_START + p] = (typeof val === 'number') ? val : 0;
                 }
 
-                const explicitFaces = scheme.faces || [];
-                for (let f = 0; f < 64; f++) {
-                    let faceNameWithSuffix = "";
-                    if (f < explicitFaces.length) {
-                        faceNameWithSuffix = explicitFaces[f];
-                    } else if (f < faceMappings.length && explicitFaces.length === 0) {
-                        faceNameWithSuffix = faceMappings[f].name;
-                    }
+                // Field Face Mapping (Slots 0-63)
+                for (let f = 0; f < 64; f++) u32Data[base + UniformLayoutValues.FACES_START + f] = 0;
 
-                    if (faceNameWithSuffix) {
-                        const faceName = faceNameWithSuffix.replace('.read', '').replace('.write', '').replace('.now', '').replace('.old', '').replace('.next', '');
-                        const res = this.parityManager.getFaceIndices(faceName);
-
-                        if (faceNameWithSuffix.endsWith('.read') || faceNameWithSuffix.endsWith('.now')) {
-                            u32Data[base + 16 + f] = res.read;
-                        } else if (faceNameWithSuffix.endsWith('.write') || faceNameWithSuffix.endsWith('.next')) {
-                            u32Data[base + 16 + f] = res.write;
-                        } else if (faceNameWithSuffix.endsWith('.old')) {
-                            u32Data[base + 16 + f] = res.old;
-                        } else {
-                            u32Data[base + 16 + f] = res.base;
-                        }
-                    } else {
-                        u32Data[base + 16 + f] = 0;
+                for (let fIdx = 0; fIdx < Math.min(faceMappings.length, 64); fIdx++) {
+                    const fm = faceMappings[fIdx];
+                    const r = this.parityManager.getFaceIndices(fm.name);
+                    const slotBase = UniformLayoutValues.FACES_START + fm.pointerOffset;
+                    const slots = [r.read, r.write, r.old, r.base];
+                    for (let s = 0; s < Math.min(fm.numSlots, 4); s++) {
+                        u32Data[base + slotBase + s] = slots[s];
                     }
                 }
 
-                // Boundaries
+                // Boundaries & Ghosts
                 const topo = meta.topology;
-                u32Data[base + 80] = ghosts;
-                u32Data[base + 81] = topo.leftRole;
-                u32Data[base + 82] = topo.rightRole;
-                u32Data[base + 83] = topo.topRole;
-                u32Data[base + 84] = topo.bottomRole;
-                u32Data[base + 85] = topo.frontRole;
-                u32Data[base + 86] = topo.backRole;
+                u32Data[base + UniformLayoutValues.GHOSTS] = ghosts;
+                u32Data[base + UniformLayoutValues.LEFT_ROLE] = topo.leftRole;
+                u32Data[base + UniformLayoutValues.RIGHT_ROLE] = topo.rightRole;
+                u32Data[base + UniformLayoutValues.TOP_ROLE] = topo.topRole;
+                u32Data[base + UniformLayoutValues.BOTTOM_ROLE] = topo.bottomRole;
+                u32Data[base + UniformLayoutValues.FRONT_ROLE] = topo.frontRole;
+                u32Data[base + UniformLayoutValues.BACK_ROLE] = topo.backRole;
             }
         }
     }

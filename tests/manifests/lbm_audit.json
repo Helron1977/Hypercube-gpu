@@ -30,14 +30,14 @@
     "version": "1.0.0",
     "faces": [
       { "name": "obs", "type": "mask", "isSynchronized": false },
-      { "name": "ux", "type": "macro", "isSynchronized": false },
-      { "name": "uy", "type": "macro", "isSynchronized": false },
-      { "name": "rho", "type": "scalar", "isSynchronized": false },
-      { "name": "curl", "type": "scalar", "isSynchronized": false },
-      { "name": "f", "type": "population", "components": 9, "isSynchronized": true }
+      { "name": "ux", "type": "scalar", "isPingPong": true, "isSynchronized": true },
+      { "name": "uy", "type": "scalar", "isPingPong": true, "isSynchronized": true },
+      { "name": "rho", "type": "scalar", "isPingPong": true, "isSynchronized": true },
+      { "name": "curl", "type": "scalar", "isPingPong": true, "isSynchronized": true },
+      { "name": "f", "type": "population", "numComponents": 9, "isPingPong": true, "isSynchronized": true }
     ],
     "rules": [
-      { "type": "LbmScientific", "source": "/src/kernels/wgsl/LbmCore.wgsl", "faces": ["obs.now", "ux.now", "uy.now", "rho.now", "curl.now", "f.now", "f.next"] }
+      { "type": "LbmScientific", "source": "src/kernels/wgsl/LbmCore.wgsl", "faces": [] }
     ],
     "requirements": {
       "ghostCells": 1,

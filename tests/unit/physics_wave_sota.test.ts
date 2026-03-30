@@ -83,9 +83,8 @@ describe('SOTA Physics Audit: Wave Equation Energy & Velocity', () => {
 
         // Verification logic for SOTA report:
         // 128 steps for a pulse at c=0.5 to revisit the center (periodic 64)
-        for(let step=0; step<10; step++) {
-            await engine.step(kernels);
-        }
+        engine.use(kernels);
+        await engine.step(10);
 
         await engine.syncFacesToHost(['u2']);
         const uFinal = engine.getFaceData('chunk_0_0_0', 'u2');

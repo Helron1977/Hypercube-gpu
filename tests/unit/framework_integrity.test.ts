@@ -149,7 +149,7 @@ describe('Bug 2 : Pas d\'écrasement rôles/objets dans les uniforms', () => {
         };
 
         const vGrid = new VirtualGrid(config, descriptor);
-        const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 2, strideFace: 66 * 66 } as unknown as MasterBuffer;
+        const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 2, strideFace: 66 * 66, layout: { totalStandardSlotsPerChunk: 2 } } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
 
         const dispatcher = new GpuDispatcher(vGrid, buffer, parity, spyDevice as any);
@@ -203,12 +203,12 @@ describe('Bug 3 : Taille du buffer uniforms >= taille struct Params', () => {
         };
 
         const vGrid = new VirtualGrid(config, descriptor);
-        const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 2, strideFace: 66 * 66 } as unknown as MasterBuffer;
+        const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 2, strideFace: 66 * 66, layout: { totalStandardSlotsPerChunk: 2 } } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
         const dispatcher = new GpuDispatcher(vGrid, buffer, parity, mockDevice as any);
         // bytesPerChunkAligned est privé, on le vérifie via la taille du staging
         // Chaque chunk a besoin de >= 416 bytes
-        expect((dispatcher as unknown as { bytesPerChunkAligned: number }).bytesPerChunkAligned).toBeGreaterThanOrEqual(PARAMS_STRUCT_MIN_BYTES);
+        expect((dispatcher as any).stagingManager.getBytesPerChunkAligned()).toBeGreaterThanOrEqual(PARAMS_STRUCT_MIN_BYTES);
     });
 });
 
@@ -221,6 +221,7 @@ describe('Bug 4 : strideFace cohérent entre framework et kernel', () => {
             chunks: [{ id: 'c0', localDimensions: { nx: 512, ny: 256, nz: 1 } }],
             dataContract: {
                 getFaceMappings: () => [{ name: 'f', isPingPong: true }],
+                getGlobalMappings: () => [],
                 descriptor: { requirements: { ghostCells: 1 } }
             }
         };
@@ -238,6 +239,7 @@ describe('Bug 4 : strideFace cohérent entre framework et kernel', () => {
             chunks: [{ id: 'c0', localDimensions: { nx: 100, ny: 100, nz: 1 } }],
             dataContract: {
                 getFaceMappings: () => [{ name: 'f', isPingPong: false }],
+                getGlobalMappings: () => [],
                 descriptor: { requirements: { ghostCells: 1 } }
             }
         };
@@ -382,7 +384,7 @@ describe('Bug 5 : config.params doivent être injectés dans p0-p7', () => {
         };
 
         const vGrid = new VirtualGrid(config, descriptor);
-        const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 1, strideFace: 66 * 66 } as unknown as MasterBuffer;
+        const buffer = { gpuBuffer: {} as GPUBuffer, totalSlotsPerChunk: 1, strideFace: 66 * 66, layout: { totalStandardSlotsPerChunk: 1 } } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
 
         const dispatcher = new GpuDispatcher(vGrid, buffer, parity, spyDevice as any);

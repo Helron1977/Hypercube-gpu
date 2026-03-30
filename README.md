@@ -69,16 +69,22 @@ const factory = new GpuCoreFactory();
 const engine = await factory.build(config, descriptor);
 
 // 3. Execution Loop
+await engine.ready();
+
+// Enregistrement persistant (v5.0.4)
+engine.use({ 'lbm-ocean': engine.getWgslHeader('lbm-ocean') + oceanWgslSource });
+
+// Elite Params API (Proxy & Fluent)
+engine.params.viscosity = 0.1;
+engine.params.set('gravity', 0.001);
+
 async function loop() {
-    await engine.ready(); // Ensure buffers are ready
+    // Calcul "Zéro-Noise"
+    await engine.step(1);
     
-    const header = engine.getWgslHeader('lbm-ocean');
-    await engine.step({ 
-        'lbm-ocean': header + oceanWgslSource 
-    }, 1);
-    
-    // Optional: Synchronize specific data for HUD/Viz
-    await engine.syncFacesToHost(['rho', 'vx']);
+    // Rapatriement asynchrone simplifié (Helper Elite)
+    const rho = await engine.getFace('rho');
+    console.log("Densité moyenne:", rho[0]);
     
     requestAnimationFrame(loop);
 }

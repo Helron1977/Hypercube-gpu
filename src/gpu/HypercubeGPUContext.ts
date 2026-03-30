@@ -122,7 +122,10 @@ export class HypercubeGPUContext {
 
         this._state.device = await adapter.requestDevice({
             label: 'Hypercube GPU Core Device',
-            requiredLimits: { maxStorageBufferBindingSize: 1_073_741_824 }
+            requiredLimits: { 
+                maxStorageBufferBindingSize: 1_073_741_824, 
+                maxBufferSize: 1_073_741_824 
+            }
         });
         this._state.isMock = false;
         (globalThis as any).__HYPERCUBE_IS_MOCK__ = false;

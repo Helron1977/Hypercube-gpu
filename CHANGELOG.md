@@ -1,3 +1,15 @@
+##[6.0.0] - 2026-03-30
+
+### 🛡️ Enterprise Stabilization & Macro Refactor
+This version refactors the core WGSL generation engine to provide a professional, collision-free API for complex simulations.
+
+### Changed
+- **Macro Engine Refactor (v5.0.2)**: Total rewrite of the internal `GpuDispatcher` header generator. Supports suffix-aware mapping (`.read`, `.write`, `.now`, `.next`) with zero-collision alias mapping.
+- **LBM Plane-Stride Support**: Native support for multi-component faces (D2Q9/D3Q19/D3Q27) using plane-based memory offsets.
+- **3D Volumetric Alignment**: Optimized `physicalNy` computation and workgroup dispatch (`8,8,4`) for high-resolution 3D grids (e.g., Mandelbulb 64³).
+- **Kernel Standardization**: Modernized all provided kernels (Diffusion, Life, FDTD) to use high-level macros consistently, ensuring they are layout-agnostic and robust to memory shifts.
+
+
 ## [5.0.2] - 2026-03-28
 
 ### 🛡️ Enterprise Stabilization & Macro Refactor
@@ -8,6 +20,12 @@ This version refactors the core WGSL generation engine to provide a professional
 - **LBM Plane-Stride Support**: Native support for multi-component faces (D2Q9/D3Q19/D3Q27) using plane-based memory offsets.
 - **3D Volumetric Alignment**: Optimized `physicalNy` computation and workgroup dispatch (`8,8,4`) for high-resolution 3D grids (e.g., Mandelbulb 64³).
 - **Kernel Standardization**: Modernized all provided kernels (Diffusion, Life, FDTD) to use high-level macros consistently, ensuring they are layout-agnostic and robust to memory shifts.
+
+## [5.0.4] - 2026-03-29
+### Added
+- **Elite Params API** : Introduction de `engine.params` avec support Proxy et Fluent (`set()`).
+- **Auto-3D Lattice Detection** : Détection automatique de la dimensionnalité (D2Q9 vs D3Q27) dans `DataContract` via le manifest.
+- **Improved Test Reliability** : Résolution des conflits de ports et stabilisation de la suite de tests unitaires (100% stable).
 
 ## [5.0.1] - 2026-03-28
 

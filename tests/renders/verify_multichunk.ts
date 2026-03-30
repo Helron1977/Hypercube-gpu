@@ -7,7 +7,7 @@ import { GpuEngine } from '../../src/GpuEngine';
 import { HypercubeConfig, EngineDescriptor } from '../../src/types';
 
 // @ts-ignore
-import Lbm3DCoreSource from '../../src/kernels/wgsl/Lbm3DCore.wgsl?raw';
+import Lbm3DCoreSource from '../kernels/Lbm3DCore.test.wgsl?raw';
 // @ts-ignore
 import HaloExchangeSource from '../../src/kernels/wgsl/HaloExchange.wgsl?raw';
 
@@ -51,11 +51,11 @@ async function runMultiChunkValidation() {
             { name: 'uy',  type: 'scalar', isSynchronized: true, isPingPong: false },
             { name: 'uz',  type: 'scalar', isSynchronized: true, isPingPong: false },
             { name: 'type', type: 'mask',   isSynchronized: false, isPingPong: false },
-            { name: 'f',    type: 'population', isSynchronized: true, isPingPong: true }
+            { name: 'f',    type: 'population3D', isSynchronized: true, isPingPong: true }
         ],
         requirements: { ghostCells: 1, pingPong: true },
         rules: [
-            { type: 'Lbm3DCore', source: Lbm3DCoreSource, params: { p0: nz, p1: 1.85, p2: 0.05 } }
+            { type: 'Lbm3DCore', source: Lbm3DCoreSource, params: { p0: nz, p1: 1.85, p2: 0.05, p7: 1000.0 } }
         ]
     };
 
@@ -71,7 +71,10 @@ async function runMultiChunkValidation() {
     for (const chunk of vGrid.chunks) {
         const dim = chunk.localDimensions;
         const ghosts = descriptor.requirements.ghostCells;
-        const size = (dim.nx + 2 * ghosts) * (dim.ny + 2 * ghosts) * ((dim.nz || 1) + 2 * ghosts);
+        const lx = dim.nx + 2 * ghosts;
+        const ly = dim.ny + 2 * ghosts;
+        const lz = (dim.nz && dim.nz > 1) ? dim.nz + 2 * ghosts : 1;
+        const size = lx * ly * lz;
         
         const rhoData = new Float32Array(size).fill(1.0);
         engine.setFaceData(chunk.id, 'rho', rhoData, true);
@@ -89,9 +92,8 @@ async function runMultiChunkValidation() {
 
     console.log("[RUN] Simulating 1000 steps across the joint...");
     const t0 = performance.now();
-    for(let i=0; i<1000; i++) {
-        await engine.step(kernels);
-    }
+    engine.use(kernels);
+    await engine.step(1000);
     const t1 = performance.now();
     console.log(`[PERF] Completed in ${(t1-t0).toFixed(2)}ms.`);
 

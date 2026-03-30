@@ -124,8 +124,8 @@ code { font-family: var(--font-mono); font-size: 13px; background: rgba(255,255,
     <span style="font-size:13px;color:var(--text-secondary)">Validation du contrat de données, allocation VRAM et compilation des kernels.</span>
   </div>
   <div class="card" style="padding:1rem;margin:0">
-    <strong style="color:var(--accent)">3. engine.use() & step()</strong><br>
-    <span style="font-size:13px;color:var(--text-secondary)">Enregistrement persistant des kernels. Les cycles de calcul sont désormais "Zero-Noise", sans repasser les sources WGSL à chaque frame.</span>
+    <strong style="color:var(--accent)">3. engine.use() & engine.params</strong><br>
+    <span style="font-size:13px;color:var(--text-secondary)">Enregistrement persistant des kernels et pilotage fluide des paramètres. Les cycles de calcul sont désormais "Zero-Noise", ultra-performants.</span>
   </div>
 </div>
 
@@ -309,8 +309,9 @@ fn write_phi(x: u32, y: u32, val: f32)</pre>
 <pre><span style="color:#888">// Dans le manifest :</span>
 "params": { "viscosity": 0.01, "gravity": 0.001 }
 
-<span style="color:#888">// Dans le code TS :</span>
-engine.setParam('viscosity', 0.02); // Mise à jour immédiate en VRAM
+<span style="color:#888">// Dans le code TS (Elite API) :</span>
+engine.params.viscosity = 0.02; // Mise à jour immédiate
+engine.params.set('gravity', 0.001); // Ou via Fluent API
 
 <span style="color:#888">// Dans le WGSL :</span>
 let nu = uniforms.p0; // Mapped auto à 'viscosity'</pre>
@@ -414,7 +415,8 @@ console.log("Densité au centre:", rho[nx/2 + (ny/2)*nx]);</pre>
     <span style="font-size:13px;color:var(--text-secondary)">
       Override dynamique des paramètres p0..p7 à chaque step pour le contrôle externe (PID, UI).
     </span>
-    <pre style="margin-top:10px;font-size:11px">engine.step(kernels, { tau: 0.8 })</pre>
+    <pre style="margin-top:10px;font-size:11px">engine.params.tau = 0.8;
+await engine.step(1);</pre>
   </div>
 </div>
 

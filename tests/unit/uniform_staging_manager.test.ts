@@ -8,6 +8,7 @@ describe('UniformStagingManager', () => {
         chunkLayout: { x: 1, y: 1 },
         dataContract: {
             getFaceMappings: () => [{ name: 'phi', isPingPong: true }],
+            getGlobalMappings: () => [],
             descriptor: { requirements: { ghostCells: 1 } }
         }
     } as any;
@@ -15,6 +16,7 @@ describe('UniformStagingManager', () => {
     const mockBuffer = { 
         strideFace: 192, 
         totalSlotsPerChunk: 2,
+        layout: { totalStandardSlotsPerChunk: 2 },
         createBuffer: vi.fn().mockReturnValue({ 
             size: 16, 
             destroy: vi.fn(), 

@@ -45,10 +45,28 @@ async function run() {
     };
     
     // 3. Calcul principal
-    await engine.step(kernels, 1);
+    // Nouveau v5.0.4 : Définition fluide des paramètres
+    engine.params
+        .set('viscosity', 0.02)
+        .set('gravity', 0.001);
+
+    // Nouveau v5.0.4 : Enregistrement persistant des kernels
+    engine.use(kernels);
+    
+    // Step sans avoir besoin de repasser les sources ou paramètres
+    await engine.step(1);
     
     requestAnimationFrame(run);
 }
+```
+
+## 4. Pilotage Direct (Proxy)
+
+Vous pouvez également modifier les paramètres directement comme des propriétés de l'objet `params`, ce qui est idéal pour le binding avec des interfaces UI (dat.GUI, Tweakpane).
+
+```typescript
+engine.params.viscosity = 0.05;
+await engine.step(1); // La nouvelle valeur est envoyée au GPU
 ```
 
 ## 5. Performance & Readback (ABK) ⚠️

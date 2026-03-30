@@ -59,7 +59,8 @@ async function runTGVCase(device: any, N: number, u0: number, nu: number, steps:
     }
     
     // CONSUME TICK 0 (LbmCore auto init)
-    await engine.step({ lbm: LbmCoreSource }); 
+    engine.use({ lbm: LbmCoreSource });
+    await engine.step(1); 
     await device.queue.onSubmittedWorkDone();
 
     // INJECT EXACT DATA FOR TGV 
@@ -91,9 +92,7 @@ async function runTGVCase(device: any, N: number, u0: number, nu: number, steps:
     engine.syncToDevice();
 
     // RUN 
-    for (let i = 0; i < steps; i++) {
-        await engine.step({ lbm: LbmCoreSource });
-    }
+    await engine.step(steps);
     await device.queue.onSubmittedWorkDone();
 
     // READ

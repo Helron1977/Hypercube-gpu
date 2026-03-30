@@ -36,7 +36,10 @@ const ALL_TESTS = [
 
 // CLI Filtering
 const filterArg = process.argv.find(arg => arg.startsWith('--test='));
-const targetId = filterArg ? filterArg.split('=')[1] : null;
+let targetId = filterArg ? filterArg.split('=')[1] : null;
+
+// Handle "all" as a special case to run everything
+if (targetId === 'all') targetId = null;
 
 const tests = targetId ? ALL_TESTS.filter(t => t.id === targetId) : ALL_TESTS;
 
@@ -47,7 +50,26 @@ if (tests.length === 0) {
 
 let currentTestIndex = 0;
 
-function runNextTest() {
+async function checkServer() {
+    return new Promise((resolve) => {
+        const req = http.get('http://localhost:5173', { timeout: 1000 }, (res) => {
+            res.resume();
+            resolve(true);
+        });
+        req.on('error', () => resolve(false));
+    });
+}
+
+async function runNextTest() {
+    if (currentTestIndex === 0) {
+        const isServerUp = await checkServer();
+        if (!isServerUp) {
+            console.error("\n❌ ERROR: Vite dev server not found on http://localhost:5173");
+            console.error("👉 Please run 'npm run dev' in a separate terminal first!\n");
+            process.exit(1);
+        }
+    }
+
     if (currentTestIndex >= tests.length) {
         console.log("\n=======================================");
         console.log("✅ ALL REQUESTED TESTS COMPLETED SUCCESSFULLY");
@@ -60,6 +82,14 @@ function runNextTest() {
     const test = tests[currentTestIndex];
     console.log(`\n▶️ [${currentTestIndex + 1}/${tests.length}] Executing ${test.name} -> ${test.url}`);
     
+    // Anticiper les échecs: si le test est silencieux pendant 35 secondes, on passe au suivant.
+    global.currentTestTimeout = setTimeout(() => {
+        console.log(`\x1b[31m❌ TIMEOUT FATAL: Le test n'a pas répondu après 35s. (Erreur de compilation probable)\x1b[0m`);
+        console.log(`⏩ Passage forcé au test suivant...`);
+        currentTestIndex++;
+        runNextTest();
+    }, 35000);
+
     // Launch browser
     const startCmd = process.platform === 'win32' ? 'start' : (process.platform === 'darwin' ? 'open' : 'xdg-open');
     exec(`${startCmd} ${test.url}`);
@@ -89,6 +119,8 @@ const server = http.createServer((req, res) => {
             return;
         }
         
+        clearTimeout(global.currentTestTimeout);
+
         console.log(`\n⬇️  [RESULT RECEIVED] Mapped Payload: ${testId}\n`);
         console.log(body);
         
@@ -113,4 +145,20 @@ const server = http.createServer((req, res) => {
 console.log("🚀 Starting Hypercube Autonomous WebGPU Test Suite Runner...");
 server.listen(3000, () => {
     runNextTest();
+}).on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+        console.error("\n❌ ERROR: Port 3000 is already in use.");
+        console.error("👉 Please close any other running instances of the test suite before restarting.\n");
+        process.exit(1);
+    }
 });
+
+// ROBUSTNESS: Ensure individual cleanup on termination
+const cleanup = () => {
+    console.log("\n🛑 Terminating Test Runner... Closing Port 3000.");
+    server.close();
+    process.exit(0);
+};
+
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);

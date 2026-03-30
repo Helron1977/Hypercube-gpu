@@ -134,8 +134,9 @@ export class Aerodynamics {
         await engine.syncFacesToHost(['obstacle']);
         const obstacleData = engine.getFaceData('chunk_0_0_0', 'obstacle');
 
+        engine.use(kernels);
         for (let s = 1; s <= STEPS; s++) {
-            await engine.step(kernels);
+            await engine.step(1);
 
             // Visualization update (START IMMEDIATELY)
             if (onFrame && s % 20 === 0) {

@@ -1,3 +1,4 @@
+
 import { HypercubeGPUContext } from '../../src/gpu/HypercubeGPUContext';
 import { VirtualGrid } from '../../src/topology/VirtualGrid';
 import { MasterBuffer } from '../../src/memory/MasterBuffer';
@@ -8,9 +9,11 @@ import { HypercubeConfig, EngineDescriptor } from '../../src/types';
 
 // @ts-ignore
 import LbmCoreSource from '../../src/kernels/wgsl/LbmCore.wgsl?raw';
+// @ts-ignore
+import LbmReductionSource from '../../src/kernels/wgsl/LbmReduction.wgsl?raw';
 
 async function runConservationAudit() {
-    console.log(`\n🚀 Starting Strict Mass & Momentum Conservation Audit...`);
+    console.log(`\n🚀 Starting STRICT Absolute GPU Conservation Audit...`);
 
     if (!await HypercubeGPUContext.init()) {
         console.error("Failed to initialize Hypercube GPU Context.");
@@ -18,156 +21,91 @@ async function runConservationAudit() {
     }
 
     const N = 256;
-    const omega = 1.0; // Stability is easy at omega=1
-    
     const config: HypercubeConfig = {
         dimensions: { nx: N, ny: N, nz: 1 },
-        chunks: { x: 1, y: 1, z: 1 },
-        engine: 'lbm-2d-conservation',
+        chunks: { x: 1, y: 1 },
+        engine: 'lbm-scientific-audit',
         boundaries: {
-            left:   { role: 'periodic' },
-            right:  { role: 'periodic' },
-            top:    { role: 'periodic' },
-            bottom: { role: 'periodic' }
+            left: { role: 'periodic' }, right: { role: 'periodic' },
+            top: { role: 'periodic' }, bottom: { role: 'periodic' }
         },
-        params: {
-            p0: omega,
-            p1: 0.1,   // Initial ux (uniform)
-            p2: 0.05   // Initial uy (uniform)
-        }
+        params: { p0: 1.0, p1: 0.1, p2: 0.05, p3: 0.0, p4: 0.0 }
     };
 
     const descriptor: EngineDescriptor = {
-        name: 'lbm-2d-conserve',
-        version: '0.1.0',
+        name: 'lbm-scientific-audit',
+        version: '1.0.0',
         faces: [
-            { name: 'type', type: 'mask',       isSynchronized: false, isPingPong: false },
-            { name: 'ux',   type: 'scalar',     isSynchronized: true,  isPingPong: false },
-            { name: 'uy',   type: 'scalar',     isSynchronized: true,  isPingPong: false },
-            { name: 'rho',  type: 'scalar',     isSynchronized: true,  isPingPong: false },
-            { name: 'curl', type: 'scalar',     isSynchronized: true,  isPingPong: false },
-            { name: 'f',    type: 'population', isSynchronized: true,  isPingPong: true }
+            { name: 'obs', type: 'mask', isPingPong: false, isSynchronized: false },
+            { name: 'ux', type: 'scalar', isPingPong: true, isSynchronized: true },
+            { name: 'uy', type: 'scalar', isPingPong: true, isSynchronized: true },
+            { name: 'rho', type: 'scalar', isPingPong: true, isSynchronized: true },
+            { name: 'curl', type: 'scalar', isPingPong: true, isSynchronized: true },
+            { name: 'f', type: 'population', isPingPong: true, isSynchronized: true, numComponents: 9 },
+            { name: 'reduction_sum', type: 'scalar', isPingPong: false, isSynchronized: false }
         ],
         requirements: { ghostCells: 1, pingPong: true },
         rules: [
-            { type: 'LbmCore', source: LbmCoreSource, params: config.params }
+            // FIX: Explicitly list faces required for each rule
+            { type: 'LbmCore', source: LbmCoreSource, faces: ['obs', 'ux', 'uy', 'rho', 'curl', 'f'] },
+            { type: 'LbmReduction', source: LbmReductionSource, faces: ['rho', 'reduction_sum'] }
         ]
     };
 
-    const vGrid = new VirtualGrid(config, descriptor);
-    const buffer = new MasterBuffer(vGrid);
-    const parityManager = new ParityManager(vGrid.dataContract);
-    const dispatcher = new GpuDispatcher(vGrid, buffer, parityManager);
-    const engine = new GpuEngine(vGrid, buffer, dispatcher, parityManager);
+    const grid = new VirtualGrid(config, descriptor);
+    const buffer = new MasterBuffer(grid);
+    const parity = new ParityManager(grid.dataContract);
+    const dispatcher = new GpuDispatcher(grid, buffer, parity);
+    const engine = new GpuEngine(grid, buffer, dispatcher, parity);
 
-    console.log("[RUN] Bypassing auto-init and injecting random state...");
-    
-    // 1. Run 1 dummy step to let the kernel finish its 'tick 0' auto-init logic.
-    // This increments parityManager to 1, ensuring all future steps are normal LBM cycles.
-    await engine.step({ 'LbmCore': LbmCoreSource }, 1);
-
-    // 2. Prepare custom state
-    const lx = N + 2;
-    const ly = N + 2;
-    const rhoData = new Float32Array(lx * ly).fill(1.0);
-    const ux_val = 0.1;
-    const uy_val = 0.05;
-    
-    for (let i = 0; i < rhoData.length; i++) {
-        rhoData[i] = 1.0 + (Math.random() * 0.2 - 0.1);
-    }
-    
-    const uxData = new Float32Array(lx * ly).fill(ux_val);
-    const uyData = new Float32Array(lx * ly).fill(uy_val);
-    
-    // Calculate feq populations for this state
-    const w = [4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36];
-    const dx = [0, 1, 0, -1, 0, 1, -1, -1, 1];
-    const dy = [0, 0, 1, 0, -1, 1, 1, -1, -1];
-    const strideFace = (buffer as any).layout.strideFace;
-    const fData = new Float32Array(strideFace * 9);
-    
-    for (let i = 0; i < lx * ly; i++) {
-        const r = rhoData[i];
-        const u2 = ux_val*ux_val + uy_val*uy_val;
-        for (let d = 0; d < 9; d++) {
-            const cu = 3.0 * (dx[d] * ux_val + dy[d] * uy_val);
-            const feq = r * w[d] * (1.0 + cu + 0.5 * cu * cu - 1.5 * u2);
-            fData[d * strideFace + i] = feq;
-        }
-    }
-
-    // 3. Inject to GPU (both buffers to be safe)
-    engine.setFaceData('chunk_0_0_0', 'rho', rhoData, true);
-    engine.setFaceData('chunk_0_0_0', 'ux',  uxData,  true);
-    engine.setFaceData('chunk_0_0_0', 'uy',  uyData,  true);
-    engine.setFaceData('chunk_0_0_0', 'f',   fData,   true);
-    engine.syncToDevice();
-
-    const sumQuantities = (rho: Float32Array, ux: Float32Array, uy: Float32Array) => {
-        let mass = 0;
-        let momX = 0;
-        let momY = 0;
-        for (let y = 1; y <= N; y++) {
-            for (let x = 1; x <= N; x++) {
-                const idx = y * lx + x;
-                const r = rho[idx];
-                mass += r;
-                momX += r * ux[idx];
-                momY += r * uy[idx];
-            }
-        }
-        return { mass, momX, momY };
+    const getAbsoluteGlobalInvariants = async () => {
+        // High-Precision Atomic Reduction via Dispatcher (30,000 scaling)
+        // results[0]=Mass, results[1]=MomX, results[2]=MomY
+        const results = await engine.dispatcher.reduce('Reduction', LbmReductionSource, 'rho', 3, 30000);
+        return { mass: results[0], momX: results[1], momY: results[2] };
     };
 
-    const initial = sumQuantities(rhoData, uxData, uyData);
-    console.log(`[INITIAL] Mass: ${initial.mass.toFixed(10)}, MomX: ${initial.momX.toFixed(10)}, MomY: ${initial.momY.toFixed(10)}`);
+    // 1. Initial Fill
+    engine.use({ 'LbmCore': LbmCoreSource });
+    await engine.step(1); 
 
-    const steps = 10000;
-    const interval = 2000;
-    console.log(`[RUN] Simulating ${steps} steps...`);
-    for (let s = 0; s < steps; s += interval) {
-        await engine.step({ 'LbmCore': LbmCoreSource }, interval);
-        console.log(`Step ${s + interval}...`);
+    // 2. Capture Baseline
+    const initial = await getAbsoluteGlobalInvariants();
+    console.log(`[INITIAL GPU] Mass: ${initial.mass.toFixed(10)}, MomX: ${initial.momX.toFixed(10)}, MomY: ${initial.momY.toFixed(10)}`);
+
+    // 3. Run Simulation
+    const iterations = 10000;
+    const stepSize = 2000;
+    console.log(`[RUN] Simulating ${iterations} steps...`);
+    
+    for (let s = 0; s < iterations; s += stepSize) {
+        await engine.step(stepSize);
+        console.log(`Step ${s + stepSize}...`);
     }
 
-    await engine.syncFacesToHost(['rho', 'ux', 'uy']);
-    const finalRho = engine.getFaceData('chunk_0_0_0', 'rho');
-    const finalUx = engine.getFaceData('chunk_0_0_0', 'ux');
-    const finalUy = engine.getFaceData('chunk_0_0_0', 'uy');
-    
-    const final = sumQuantities(finalRho, finalUx, finalUy);
+    // 4. Capture Result
+    const final = await getAbsoluteGlobalInvariants();
     console.log(`[FINAL] Mass: ${final.mass.toFixed(10)}, MomX: ${final.momX.toFixed(10)}, MomY: ${final.momY.toFixed(10)}`);
 
-    const driftMass = Math.abs(final.mass - initial.mass) / initial.mass;
-    const driftMomX = Math.abs(final.momX - initial.momX) / Math.max(1, Math.abs(initial.momX));
-    const driftMomY = Math.abs(final.momY - initial.momY) / Math.max(1, Math.abs(initial.momY));
+    const driftM = Math.abs(final.mass - initial.mass) / (Math.abs(initial.mass) || 1.0);
+    const driftX = Math.abs(final.momX - initial.momX) / (Math.abs(initial.momX) || 1.0);
+    const driftY = Math.abs(final.momY - initial.momY) / (Math.abs(initial.momY) || 1.0);
 
-    console.log(`\n--- Audit Results ---`);
-    console.log(`Relative Mass Drift:     ${driftMass.toExponential(4)}`);
-    console.log(`Relative Momentum X Drift: ${driftMomX.toExponential(4)}`);
-    console.log(`Relative Momentum Y Drift: ${driftMomY.toExponential(4)}`);
+    console.log(`\n--- Absolute Audit Results ---`);
+    console.log(`Relative Mass Drift:     ${driftM.toExponential(4)}`);
+    console.log(`Relative Momentum X Drift: ${driftX.toExponential(4)}`);
+    console.log(`Relative Momentum Y Drift: ${driftY.toExponential(4)}`);
 
-    const status = (driftMass < 1e-7) ? 'stable' : 'failed'; 
-    
-    const payload = {
-        type: 'conservation-audit',
-        initial,
-        final,
-        drifts: { mass: driftMass, momX: driftMomX, momY: driftMomY },
-        status
-    };
+    const statusM = (driftM < 1e-12) ? 'SUCCESS' : 'FAILED: LEAK';
+    const statusX = (driftX < 1e-10) ? 'SUCCESS' : 'FAILED: DRIFT';
+    const statusY = (driftY < 1e-10) ? 'SUCCESS' : 'FAILED: DRIFT';
 
-    fetch('http://localhost:3000', {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'x-test-name': `conservation-audit`
-        },
-        body: JSON.stringify(payload)
-    }).catch(() => {});
+    console.log(`\nAudit Summary: Mass[${statusM}] MomX[${statusX}] MomY[${statusY}]\n`);
 
-    return payload;
+    const isStable = statusM === 'SUCCESS' && statusX === 'SUCCESS' && statusY === 'SUCCESS';
+    const status = isStable ? 'stable' : 'DRIFT_DETECTED';
+
+    return { initial, final, drifts: { driftM, driftX, driftY }, status };
 }
 
 export { runConservationAudit };

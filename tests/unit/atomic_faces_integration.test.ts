@@ -60,10 +60,10 @@ describe('GpuDispatcher: Professional Atomics (TDD v5.0.4)', () => {
         const mockMB = new MasterBuffer(vGrid, mockDevice as any);
         const dispatcher = new GpuDispatcher(vGrid, mockMB, parity, mockDevice as any);
 
-        const header = dispatcher.getWgslHeader('Update');
+        const { code: header } = dispatcher.getWgslHeader('Update');
 
         // 1. Verify Binding 2 exists in header
-        expect(header).toContain('@group(0) @binding(2) var<storage, read_write> dataAtomic: array<atomic<u32>>');
+        expect(header).toContain('@group(0) @binding(2) var<storage, read_write> dataAtomic: array<atomic<i32>>');
 
         // 2. Verify CAS loop helper exists
         expect(header).toContain('fn _hypercube_atomicAddF32');

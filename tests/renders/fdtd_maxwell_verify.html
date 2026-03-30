@@ -71,6 +71,7 @@
             L('[3/3] Loading kernels (E + H)...');
             wgslE = await (await fetch('/src/kernels/wgsl/FdtdUpdateE.wgsl')).text();
             wgslH = await (await fetch('/src/kernels/wgsl/FdtdUpdateH.wgsl')).text();
+            engine.use({ 'FdtdUpdateE': wgslE, 'FdtdUpdateH': wgslH });
             running = true; lt = performance.now();
             L('✓ EM fields active');
             requestAnimationFrame(tick);
@@ -84,13 +85,13 @@
             document.getElementById('valFreq').innerText = freq.toFixed(0);
 
             // p0=dt_eps, p1=dt_mu, p2=_pad, p3=srcX, p4=srcY, p5=srcVal
-            engine.vGrid.config.params.p0 = c;     // dt_eps
-            engine.vGrid.config.params.p1 = c;     // dt_mu
-            engine.vGrid.config.params.p3 = 64;    // srcX
-            engine.vGrid.config.params.p4 = 64;    // srcY
-            engine.vGrid.config.params.p5 = Math.sin(now / 1000 * Math.PI * 2 * freq) * 0.5; // srcVal
+            engine.params.p0 = c;     // dt_eps
+            engine.params.p1 = c;     // dt_mu
+            engine.params.p3 = 64;    // srcX
+            engine.params.p4 = 64;    // srcY
+            engine.params.p5 = Math.sin(now / 1000 * Math.PI * 2 * freq) * 0.5; // srcVal
 
-            await engine.step({'FdtdUpdateE': wgslE, 'FdtdUpdateH': wgslH}, 1);
+            await engine.step(1);
 
             const faceIdx = engine.parityManager.getFaceIndices('Ez').base;
             await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {

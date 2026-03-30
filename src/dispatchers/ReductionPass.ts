@@ -3,6 +3,8 @@ import { MasterBuffer } from '../memory/MasterBuffer';
 import { ParityManager } from '../ParityManager';
 import { PipelineCache } from './PipelineCache';
 import { UniformStagingManager } from './UniformStagingManager';
+import { UniformLayoutValues } from './UniformLayout';
+import { WgslHeaderResult } from './WgslHeaderGenerator';
 
 /**
  * Handles GPU Reduction passes (sum, min, max using atomics).
@@ -24,7 +26,7 @@ export class ReductionPass {
         parityManager: ParityManager,
         pipelineCache: PipelineCache,
         stagingManager: UniformStagingManager,
-        getWgslHeader: (type: string) => string,
+        getWgslHeader: (type: string, source: string) => WgslHeaderResult,
         source: string,
         faceName?: string,
         numResults: number = 1,
@@ -43,7 +45,8 @@ export class ReductionPass {
         
         device.queue.writeBuffer(this.forceResultsBuffer, 0, new Int32Array(4).fill(0));
         
-        const pipeline = await pipelineCache.getPipeline(device, 'Reduction', source, getWgslHeader);
+        const metadata = await pipelineCache.getPipeline(device, 'Reduction', source, getWgslHeader);
+        const pipeline = metadata.pipeline;
         const encoder = device.createCommandEncoder();
         
         stagingManager.ensureBuffers(device);
@@ -59,32 +62,52 @@ export class ReductionPass {
             const base = (i * maxRules) * (bytesPerChunkAligned / 4);
             const dim = meta.vChunk.localDimensions;
             const ghosts = vGrid.dataContract.descriptor.requirements.ghostCells || 1;
-            const strideRow = buffer.layout?.strideRow || (dim.nx + 2);
+            const layoutStrideRow = buffer.layout?.strideRow || (dim.nx + (ghosts * 2));
+            const layoutPhysicalNy = dim.ny + (ghosts * 2);
 
-            stagingBuffer[base + 0] = dim.nx;
-            stagingBuffer[base + 1] = dim.ny;
-            stagingBuffer[base + 2] = strideRow;
-            stagingBuffer[base + 3] = dim.ny + (ghosts * 2);
-            stagingBuffer[base + 5] = parityManager.currentTick;
-            stagingBuffer[base + 6] = buffer.strideFace;
-            stagingBuffer[base + 7] = faceMappings.length;
+            stagingBuffer[base + UniformLayoutValues.NX] = dim.nx;
+            stagingBuffer[base + UniformLayoutValues.NY] = dim.ny;
+            stagingBuffer[base + UniformLayoutValues.STRIDE_ROW] = layoutStrideRow;
+            stagingBuffer[base + UniformLayoutValues.PHYSICAL_NY] = Math.floor(layoutPhysicalNy);
+            stagingBuffer[base + UniformLayoutValues.TICK] = parityManager.currentTick;
+            stagingBuffer[base + UniformLayoutValues.STRIDE_FACE] = buffer.strideFace;
+            stagingBuffer[base + UniformLayoutValues.NUM_FACES] = faceMappings.length;
+            stagingBuffer[base + UniformLayoutValues.GHOSTS] = ghosts;
 
             const configParams = vGrid.config.params || {};
-            for (let p = 0; p < 7; p++) {
+            for (let p = 0; p < 8; p++) {
                 const key = `p${p}`;
-                if (configParams[key] !== undefined) f32View[base + 8 + p] = configParams[key];
+                if (configParams[key] !== undefined) f32View[base + UniformLayoutValues.PARAMS_START + p] = configParams[key];
             }
 
-            // FIX: Parameterized scaling for atomic precision
-            f32View[base + 15] = precisionScale;
+            // High Precision Scaling for Atomic-based Reduction (mapped to p7)
+            f32View[base + UniformLayoutValues.PARAMS_START + 7] = precisionScale;
 
-            for (let f = 0; f < 16; f++) {
-                if (f < faceMappings.length) {
-                    const m = faceMappings[f];
-                    const res = parityManager.getFaceIndices(m.name);
-                    stagingBuffer[base + 16 + f] = m.isPingPong ? res.read : res.base;
-                } else {
-                    stagingBuffer[base + 16 + f] = 999;
+            // Clear the faces section with zeroes first
+            for (let f = 0; f < 64; f++) stagingBuffer[base + UniformLayoutValues.FACES_START + f] = 0;
+
+            // Elite Alignment: If a specific face is requested, target its 'Now' slot
+            if (faceName) {
+                const fm = faceMappings.find(m => m.name === faceName);
+                if (fm) {
+                    // Target the correct current read slot dynamically
+                    f32View[base + UniformLayoutValues.PARAMS_START + 0] = parityManager.getFaceIndices(fm.name).read;
+                }
+            }
+
+            for (let fIdx = 0; fIdx < Math.min(faceMappings.length, 64); fIdx++) {
+                const fm = faceMappings[fIdx];
+                const res = parityManager.getFaceIndices(fm.name);
+                
+                // Elite Automatic Mapping (Dynamic Slots: Base, Now, Next, Old)
+                const slotBase = UniformLayoutValues.FACES_START + fm.pointerOffset;
+                stagingBuffer[base + slotBase + 0] = res.base;
+                if (fm.numSlots >= 4) {
+                    stagingBuffer[base + slotBase + 1] = res.read;
+                    stagingBuffer[base + slotBase + 2] = res.write;
+                    stagingBuffer[base + slotBase + 3] = res.old;
+                } else if (fm.numSlots >= 2) {
+                    stagingBuffer[base + slotBase + 1] = res.read;
                 }
             }
         }
@@ -94,20 +117,51 @@ export class ReductionPass {
         pass.setPipeline(pipeline);
         for (let i = 0; i < dispatchMetadata.length; i++) {
             const meta = dispatchMetadata[i];
-            const ruleOffset = 0; // Reduction usually happens on rule 0 or dedicated rule
+            const ruleOffset = 0; 
+            
+            const entries: GPUBindGroupEntry[] = [
+                { binding: 0, resource: { buffer: buffer.gpuBuffer, offset: meta.dataOffset, size: meta.dataSize } },
+                { binding: 1, resource: { buffer: stagingManager.uniformBuffer!, offset: meta.uniformOffset + ruleOffset, size: bytesPerChunkAligned } }
+            ];
+
+            // Binding 2: Field Atomics OR Legacy Results Buffer
+            if (metadata.usesAtomics) {
+                const atomicBuffer = this.forceResultsBuffer || buffer.gpuAtomicBuffer;
+                if (atomicBuffer) {
+                    entries.push({ binding: 2, resource: { buffer: atomicBuffer } });
+                }
+            }
+
+            // Binding 3: Global Workspace (v6.0 SOTA Reduction)
+            if (metadata.usesGlobals) {
+                const globals = vGrid.dataContract.getGlobalMappings();
+                if (globals.length > 0) {
+                    if (!buffer.gpuGlobalBuffer) {
+                        throw new Error(`ReductionPass: Dedicated GPU Global Buffer not available.`);
+                    }
+                    const globalSize = vGrid.dataContract.calculateGlobalBytes();
+                    entries.push({
+                        binding: 3,
+                        resource: { buffer: buffer.gpuGlobalBuffer, offset: 0, size: Math.max(globalSize, 16) }
+                    });
+                }
+            }
             
             const bindGroup = device.createBindGroup({
                 layout: pipeline.getBindGroupLayout(0),
-                entries: [
-                    { binding: 0, resource: { buffer: buffer.gpuBuffer, offset: meta.dataOffset, size: meta.dataSize } },
-                    { binding: 1, resource: { buffer: stagingManager.uniformBuffer!, offset: meta.uniformOffset + ruleOffset, size: bytesPerChunkAligned } },
-                    { binding: 2, resource: { buffer: this.forceResultsBuffer } }
-                ]
+                entries
             });
             
             pass.setBindGroup(0, bindGroup);
             const dim = meta.vChunk.localDimensions;
-            pass.dispatchWorkgroups(Math.ceil(dim.nx / 16), Math.ceil(dim.ny / 16), dim.nz || 1);
+            const nz = dim.nz || 1;
+            
+            // Adjust workgroup count based on metadata (8,8,4 for 3D, 16,16,1 for 2D)
+            if (nz > 1) {
+                pass.dispatchWorkgroups(Math.ceil(dim.nx / 8), Math.ceil(dim.ny / 8), Math.ceil(nz / 4));
+            } else {
+                pass.dispatchWorkgroups(Math.ceil(dim.nx / 16), Math.ceil(dim.ny / 16), 1);
+            }
         }
         pass.end();
         
@@ -125,7 +179,9 @@ export class ReductionPass {
     }
 
     public destroy(): void {
-        if (this.forceResultsBuffer) this.forceResultsBuffer.destroy();
-        if (this.forceResultsStaging) this.forceResultsStaging.destroy();
+        const b1 = this.forceResultsBuffer;
+        if (b1) b1.destroy();
+        const b2 = this.forceResultsStaging;
+        if (b2) b2.destroy();
     }
 }

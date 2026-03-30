@@ -29,7 +29,7 @@ describe('GpuDispatcher: Header Generation Logic', () => {
         const vGrid = new VirtualGrid({ dimensions: { nx: 8, ny: 8 }, chunks: { x: 1, y: 1 }, engine: 'std' } as any, descriptor as any);
         const dispatcher = new GpuDispatcher(vGrid, mockMB, new ParityManager(vGrid.dataContract), mockDevice as any);
 
-        const header = dispatcher.getWgslHeader('Update');
+        const { code: header } = dispatcher.getWgslHeader('Update');
         
         expect(header).not.toContain('@binding(2)');
         expect(header).not.toContain('_hypercube_atomicAddF32');
@@ -45,7 +45,7 @@ describe('GpuDispatcher: Header Generation Logic', () => {
         const vGrid = new VirtualGrid({ dimensions: { nx: 8, ny: 8 }, chunks: { x: 1, y: 1 }, engine: 'u32' } as any, descriptor as any);
         const dispatcher = new GpuDispatcher(vGrid, mockMB, new ParityManager(vGrid.dataContract), mockDevice as any);
 
-        const header = dispatcher.getWgslHeader('Update');
+        const { code: header } = dispatcher.getWgslHeader('Update');
         
         expect(header).toContain('@binding(2)');
         expect(header).not.toContain('_hypercube_atomicAddF32');
@@ -62,7 +62,7 @@ describe('GpuDispatcher: Header Generation Logic', () => {
         const vGrid = new VirtualGrid({ dimensions: { nx: 8, ny: 8 }, chunks: { x: 1, y: 1 }, engine: 'f32' } as any, descriptor as any);
         const dispatcher = new GpuDispatcher(vGrid, mockMB, new ParityManager(vGrid.dataContract), mockDevice as any);
 
-        const header = dispatcher.getWgslHeader('Update');
+        const { code: header } = dispatcher.getWgslHeader('Update');
         
         expect(header).toContain('@binding(2)');
         expect(header).toContain('_hypercube_atomicAddF32');

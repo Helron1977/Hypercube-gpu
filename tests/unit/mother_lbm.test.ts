@@ -65,7 +65,8 @@ describe('LBM Mother Model Integration', () => {
         const buffer = {
             gpuBuffer: {} as GPUBuffer,
             totalSlotsPerChunk: 10,
-            strideFace: 66 * 66
+            strideFace: 66 * 66,
+            layout: { totalStandardSlotsPerChunk: 10 }
         } as unknown as MasterBuffer;
         const parity = new ParityManager(vGrid.dataContract);
 

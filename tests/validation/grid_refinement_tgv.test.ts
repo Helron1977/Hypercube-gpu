@@ -97,7 +97,8 @@ describe('Grid Refinement Study (Numerical Verification)', () => {
         // To fix this without breaking other tests, we should disable auto-init if p1 == -999, or just run 1 step to consume tick 0, then inject our data!
         
         // CONSUME TICK 0
-        await engine.step(kernels); 
+        engine.use(kernels);
+        await engine.step(1); 
         if (device.queue.onSubmittedWorkDone) await device.queue.onSubmittedWorkDone();
 
         // INJECT EXACT DATA FOR TGV (at t=0 logically, even though engine is at tick=1)
@@ -127,9 +128,7 @@ describe('Grid Refinement Study (Numerical Verification)', () => {
         engine.syncToDevice(); // CRITICAL: Pousser les données sur le GPU
 
         // RUN STEPS
-        for (let i = 0; i < steps; i++) {
-            await engine.step(kernels);
-        }
+        await engine.step(steps);
         if (device.queue.onSubmittedWorkDone) await device.queue.onSubmittedWorkDone();
 
         // READ BACK

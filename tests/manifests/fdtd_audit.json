@@ -15,8 +15,8 @@
       { "name": "Hy", "type": "field", "isSynchronized": true }
     ],
     "rules": [
-      { "type": "FdtdUpdateE", "source": "/src/kernels/wgsl/FdtdUpdateE.wgsl", "faces": ["Ez", "Hx", "Hy"] },
-      { "type": "FdtdUpdateH", "source": "/src/kernels/wgsl/FdtdUpdateH.wgsl", "faces": ["Ez", "Hx", "Hy"] }
+      { "type": "FdtdUpdateE", "source": "/src/kernels/wgsl/FdtdUpdateE.wgsl" },
+      { "type": "FdtdUpdateH", "source": "/src/kernels/wgsl/FdtdUpdateH.wgsl" }
     ]
   }
 }

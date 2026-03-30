@@ -167,6 +167,9 @@
                 const respRed = await fetch('/src/kernels/wgsl/ReductionCore.wgsl');
                 reductionSource = await respRed.text();
 
+                logMsg('[4.5/5] Enregistrement du kernel LBM...');
+                engine.use({ 'LbmScientific': kernelSource });
+
                 logMsg('[5/5] Démarrage de la boucle de simulation ✓');
                 isRunning = true;
                 lastFpsTime = performance.now();
@@ -187,8 +190,12 @@
             const imageData = ctx.createImageData(512, 256);
             const scale = parseFloat(document.getElementById('paramInflow').value) * 10.0;
             
-            // Slots basés sur le manifest : obs=0, ux=1, uy=2, rho=3, curl=4
-            const SL_UX = 1, SL_UY = 2, SL_RHO = 3, SL_CURL = 4;
+            // V6 Parity-Aware Resolution: Locate the correct 'Now' plane for each face
+            const SL_OBS  = engine.parityManager.getFaceIndices('obs').read;
+            const SL_UX   = engine.parityManager.getFaceIndices('ux').read;
+            const SL_UY   = engine.parityManager.getFaceIndices('uy').read;
+            const SL_RHO  = engine.parityManager.getFaceIndices('rho').read;
+            const SL_CURL = engine.parityManager.getFaceIndices('curl').read;
 
             for (let y = 0; y < 256; y++) {
                 for (let x = 0; x < 512; x++) {
@@ -232,11 +239,11 @@
             const inflow = parseFloat(document.getElementById('paramInflow').value);
             document.getElementById('valOmega').innerText = omega.toFixed(2);
             document.getElementById('valInflow').innerText = inflow.toFixed(2);
-            engine.vGrid.config.params.p0 = omega;
-            engine.vGrid.config.params.p1 = inflow;
+            engine.params.p0 = omega;
+            engine.params.p1 = inflow;
 
             // Step le moteur (LBM uniquement ici)
-            await engine.step({ 'LbmScientific': kernelSource });
+            await engine.step(1);
 
             // Rendu Local
             const res = await GpuDemoHelper.renderToCanvas(
@@ -259,7 +266,7 @@
                 document.getElementById('hud-step').innerText = tick;
                 
                 try {
-                   engine.vGrid.config.params.p0 = 3; // Index face rho
+                   engine.params.p0 = 3; // Index face rho
                    const currentMass = await engine.reduceField('rho', reductionSource);
                    if (initialMass === 0 || initialMass < 0.1) initialMass = currentMass;
                    const drift = (currentMass - initialMass) / (initialMass || 1);
@@ -269,12 +276,22 @@
 
                 const i_probe = (probePoint.y + ghosts) * lx + (probePoint.x + ghosts);
                 const r = res.results;
-                const rho = r[3 * strideFace + i_probe];
-                const vx  = r[1 * strideFace + i_probe];
-                const vy  = r[2 * strideFace + i_probe];
+                
+                // Parity-aware probe reading
+                const P_RHO  = engine.parityManager.getFaceIndices('rho').read;
+                const P_UX   = engine.parityManager.getFaceIndices('ux').read;
+                const P_UY   = engine.parityManager.getFaceIndices('uy').read;
+                const P_CURL = engine.parityManager.getFaceIndices('curl').read;
+
+                const rho  = r[P_RHO * strideFace + i_probe];
+                const vx   = r[P_UX  * strideFace + i_probe];
+                const vy   = r[P_UY  * strideFace + i_probe];
+                const curl = r[P_CURL * strideFace + i_probe];
+
                 document.getElementById('probe-pos').innerText = `${probePoint.x}, ${probePoint.y}`;
                 document.getElementById('probe-rho').innerText = isNaN(rho) ? 'NaN!' : rho.toFixed(6);
                 document.getElementById('probe-vel').innerText = `[${vx?.toFixed(4)}, ${vy?.toFixed(4)}]`;
+                document.getElementById('probe-curl').innerText = isNaN(curl) ? '0' : curl.toFixed(4);
             }
             requestAnimationFrame(frame);
         }

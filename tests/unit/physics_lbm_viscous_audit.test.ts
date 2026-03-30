@@ -60,8 +60,8 @@ describe('SOTA Phase 9: LBM Viscous Audit (Poiseuille Profile)', () => {
             boundaries: { 
                 left: { role: 'periodic' }, 
                 right: { role: 'periodic' }, 
-                top: { role: 'no-slip' }, 
-                bottom: { role: 'no-slip' } 
+                top: { role: 'wall' }, 
+                bottom: { role: 'wall' } 
             },
             engine: 'lbm-viscous-audit',
             params: {}
@@ -71,12 +71,11 @@ describe('SOTA Phase 9: LBM Viscous Audit (Poiseuille Profile)', () => {
         const kernels = { 'lbm': loadKernel('LbmCore.wgsl') };
 
         // 1. Initial State: static
-        await engine.step(kernels);
+        engine.use(kernels);
+        await engine.step(1);
 
         // 2. Converge (500 steps for small channel)
-        for(let s=0; s<500; s++) {
-            await engine.step(kernels);
-        }
+        await engine.step(500);
 
         await engine.syncFacesToHost(['vx']);
         const vx = engine.getFaceData('chunk_0_0_0', 'vx');

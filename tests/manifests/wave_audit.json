@@ -14,7 +14,7 @@
       { "name": "u", "type": "field", "isSynchronized": true, "numSlots": 3 }
     ],
     "rules": [
-      { "type": "WaveCore", "source": "/src/kernels/wgsl/WaveCore.wgsl", "faces": ["u.now", "u.old", "u.next"] }
+      { "type": "WaveCore", "source": "/src/kernels/wgsl/WaveCore.wgsl", "faces": [] }
     ]
   }
 }

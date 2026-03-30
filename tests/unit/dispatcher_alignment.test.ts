@@ -18,8 +18,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= uniforms.nx || id.y >= uniforms.ny) { return; }
     let i = (id.y + 1u) * uniforms.strideRow + (id.x + 1u);
     
-    let f0_idx = uniforms.faces[0];
-    let f1_idx = uniforms.faces[1];
+    let f0_idx = uniforms.faces[0];  // Face 0 Base
+    let f1_idx = uniforms.faces[4];  // Face 1 Base (Slot 4 in 1:4 layout)
     let tick = uniforms.tick;
     
     // Write probe values
@@ -90,7 +90,8 @@ describe('GpuDispatcher: Mathematical Alignment Proof', () => {
         const kernels = { probe: PROBE_WGSL };
 
         // Verification after Step 1 (Tick 0)
-        await engine.step(kernels, 1);
+        engine.use(kernels);
+        await engine.step(1);
         expect(engine).toBeDefined();
         
         console.log("✓ ALIGNMENT PROOF SYNTAX OK: Context initialization verified.");

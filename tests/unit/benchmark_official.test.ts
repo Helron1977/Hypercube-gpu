@@ -52,7 +52,8 @@ describe('Official SOTA Benchmark: Lid-Driven Cavity', () => {
         console.log(`Initial lid velocity: ${lidVelocity}`);
 
         // 2. Step the simulation
-        await engine.step({ 'LbmCore': lbmSource }, 1);
+        engine.use({ 'LbmCore': lbmSource });
+        await engine.step(1);
 
         // 3. Sync 'vx' to host
         await engine.buffer.syncFacesToHost(['vx']);

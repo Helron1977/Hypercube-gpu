@@ -9,6 +9,7 @@ describe('MemoryLayout Bounds', () => {
                 { name: 'phi', numComponents: 1, numSlots: 2, isPingPong: true },
                 { name: 'f',   numComponents: 9, numSlots: 1, isPingPong: false }
             ],
+            getGlobalMappings: () => [],
             descriptor: {
                 requirements: { ghostCells: 1 }
             }

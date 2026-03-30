@@ -75,9 +75,8 @@ describe('SOTA Phase 9: Wave Impedance & Reflection Audit', () => {
         engine.setFaceData('chunk_0_0_0', 'u1', u0);
 
         // 2. Evolve for 100 steps
-        for(let s=0; s<10; s++) { // 100 in SOTA
-            await engine.step(kernels);
-        }
+        engine.use(kernels);
+        await engine.step(10);
 
         await engine.syncFacesToHost(['u2']);
         const uFinal = engine.getFaceData('chunk_0_0_0', 'u2');

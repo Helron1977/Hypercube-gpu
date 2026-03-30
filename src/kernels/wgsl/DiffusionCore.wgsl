@@ -14,12 +14,12 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let alpha = uniforms.p0;
     
     // Diffusion stencil using Standard Macros (Host-handled parity)
-    let u = read_t(px, py);
-    let uL = read_t(px - 1u, py);
-    let uR = read_t(px + 1u, py);
-    let uT = read_t(px, py + 1u);
-    let uB = read_t(px, py - 1u);
+    let u = read_t_Now(px, py);
+    let uL = read_t_Now(px - 1u, py);
+    let uR = read_t_Now(px + 1u, py);
+    let uT = read_t_Now(px, py + 1u);
+    let uB = read_t_Now(px, py - 1u);
     
     let lap = (uL + uR + uT + uB - 4.0 * u);
-    write_t(px, py, u + alpha * lap);
+    write_t_Next(px, py, u + alpha * lap);
 }

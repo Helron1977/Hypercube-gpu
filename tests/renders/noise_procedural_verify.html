@@ -56,6 +56,7 @@
             lx = engine.buffer.layout.strideRow;
             L('[3/3] Loading kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/NoiseCore.wgsl')).text();
+            engine.use({ 'NoiseCore': wgsl });
             running = true; lt = performance.now();
             L('✓ Noise streaming');
             requestAnimationFrame(tick);
@@ -63,7 +64,7 @@
 
         async function tick(now) {
             if (!running) return;
-            await engine.step({'NoiseCore': wgsl}, 1);
+            await engine.step(1);
 
             await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
                 mode: 'single', nx: 256, ny: 256,

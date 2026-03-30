@@ -37,7 +37,7 @@ describe('3D LBM Validation (D3Q19)', () => {
         })
     } as unknown as GPUDevice;
 
-    const kernelsDir = path.join(__dirname, '../../src/kernels/wgsl');
+    const kernelsDir = path.join(__dirname, '../kernels');
     const loadKernel = (name: string) => fs.readFileSync(path.join(kernelsDir, name), 'utf-8');
 
     it('3D Poiseuille Flow: should develop a parabolic velocity profile in a duct', async () => {
@@ -66,23 +66,24 @@ describe('3D LBM Validation (D3Q19)', () => {
             boundaries: { 
                 left: { role: 'inflow' }, 
                 right: { role: 'outflow' }, 
-                top: { role: 'bounce-back' as unknown as 'wall' }, 
-                bottom: { role: 'bounce-back' as unknown as 'wall' }, 
-                front: { role: 'bounce-back' as unknown as 'wall' }, 
-                back: { role: 'bounce-back' as unknown as 'wall' } 
+                top: { role: 'wall' }, 
+                bottom: { role: 'wall' }, 
+                front: { role: 'wall' }, 
+                back: { role: 'wall' } 
             },
             engine: 'lbm-3d-poiseuille',
             params: {}
         };
 
         const engine = await factory.build(config, descriptor);
-        const kernels = { 'lbm3d': loadKernel('Lbm3DCore.wgsl') };
+        const kernels = { 'lbm3d': loadKernel('Lbm3DCore.test.wgsl') };
 
         // Mock initialization (force field or velocity boundary usually drives this, here we just set initial field)
         const vxData = new Float32Array((32+2)*(16+2)*(16+2)).fill(0.01);
         engine.setFaceData('chunk_0_0_0', 'vx', vxData);
-
-        await engine.step(kernels);
+        
+        engine.use(kernels);
+        await engine.step(1);
         await engine.syncFacesToHost(['vx']);
         
         // Since we are operating gracefully with the mockDevice, we expect the pipeline not to crash

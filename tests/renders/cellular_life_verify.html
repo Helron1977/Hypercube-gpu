@@ -65,6 +65,7 @@
 
             L('[4/4] Loading kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/CellularCore.wgsl')).text();
+            engine.use({ 'CellularCore': wgsl });
             running = true; lt = performance.now();
             L('✓ Life seeded');
             requestAnimationFrame(tick);
@@ -72,7 +73,7 @@
 
         async function tick(now) {
             if (!running) return;
-            await engine.step({'CellularCore': wgsl}, 1);
+            await engine.step(1);
 
             const res = await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
                 mode: 'single', nx: 256, ny: 256,

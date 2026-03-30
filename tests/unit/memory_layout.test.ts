@@ -14,6 +14,7 @@ describe('MemoryLayout', () => {
                     { name: 'rho', isPingPong: true, numComponents: 1, numSlots: 2 },
                     { name: 'vx', isPingPong: false, numComponents: 1, numSlots: 1 }
                 ],
+                getGlobalMappings: () => [],
                 descriptor: {
                     requirements: { ghostCells: 1 }
                 }

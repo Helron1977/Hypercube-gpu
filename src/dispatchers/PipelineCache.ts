@@ -1,10 +1,18 @@
 import { HypercubeGPUContext } from '../gpu/HypercubeGPUContext';
+import { WgslHeaderGenerator, WgslHeaderResult } from './WgslHeaderGenerator';
+
+export interface PipelineMetadata {
+    pipeline: GPUComputePipeline;
+    usesAtomics: boolean;
+    usesGlobals: boolean;
+}
 
 /**
  * Handles WebGPU Compute Pipeline caching with robust hashing.
+ * v6.0: Enhanced with pre-calculated resource metadata (Zero-Stall).
  */
 export class PipelineCache {
-    private pipelines: Map<string, GPUComputePipeline> = new Map();
+    private pipelines: Map<string, PipelineMetadata> = new Map();
     private currentDevice?: GPUDevice;
 
     constructor() {}
@@ -16,27 +24,36 @@ export class PipelineCache {
         device: GPUDevice, 
         ruleType: string, 
         source: string, 
-        getWgslHeader: (type: string) => string
-    ): Promise<GPUComputePipeline> {
+        getWgslHeader: (type: string, source: string) => WgslHeaderResult
+    ): Promise<PipelineMetadata> {
         // Context Loss / Device Change Protection
         if (this.currentDevice !== device) {
             this.currentDevice = device;
             this.clear();
         }
 
-        const header = getWgslHeader(ruleType);
-        const combinedSource = header + source;
+        const headerResult = getWgslHeader(ruleType, source);
+        const combinedSource = headerResult.code + "\n" + source;
         
         // Robust Hashing (Fixes substring collision bug)
         const hash = this.computeHash(combinedSource);
         const cacheKey = `${ruleType}_${hash}`;
 
-        let p = this.pipelines.get(cacheKey);
-        if (p) return p;
+        let cached = this.pipelines.get(cacheKey);
+        if (cached) return cached;
 
-        p = await HypercubeGPUContext.createComputePipelineAsync(combinedSource, `Kernel_${ruleType}`);
-        this.pipelines.set(cacheKey, p);
-        return p;
+        const p = await HypercubeGPUContext.createComputePipelineAsync(combinedSource, `Kernel_${ruleType}`);
+        
+        // PRE-CALCULATE METADATA (v6.0 Alpha Zero-Stall)
+        // Now using the DEFINITIVE flags from the header generator
+        const metadata: PipelineMetadata = {
+            pipeline: p,
+            usesAtomics: headerResult.usesAtomics,
+            usesGlobals: headerResult.usesGlobals
+        };
+
+        this.pipelines.set(cacheKey, metadata);
+        return metadata;
     }
 
     private computeHash(str: string): number {

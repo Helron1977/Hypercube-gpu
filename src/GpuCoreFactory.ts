@@ -18,8 +18,8 @@ export class GpuCoreFactory {
         }
 
         const vGrid = new VirtualGrid(config, engine);
-        const buffer = new MasterBuffer(vGrid, mockDevice);
         const parityManager = new ParityManager(vGrid.dataContract);
+        const buffer = new MasterBuffer(vGrid, parityManager, mockDevice);
         const dispatcher = new GpuDispatcher(vGrid, buffer, parityManager, mockDevice);
 
         return new GpuEngine(vGrid, buffer, dispatcher, parityManager);

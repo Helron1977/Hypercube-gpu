@@ -20,30 +20,10 @@
                     log("🔥 GPU Error: " + e.error.message);
                 });
 
-                const PROBE_WGSL = `
-                // Redefinition struct Params removed - using inherited uniforms
-                @compute @workgroup_size(1, 1)
-                fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-                    if (id.x == 0 && id.y == 0) {
-                        let strideFace = uniforms.strideFace;
-                        // Start of Face 0
-                        data[uniforms.faces[0] * strideFace + 0] = 777.0 + f32(uniforms.tick);
-                        // End of Face 1 (with parity)
-                        let parity = uniforms.tick % 2u;
-                        data[(uniforms.faces[1] + parity) * strideFace + 66819] = 888.0 + f32(uniforms.tick);
-                    }
-                }
-                `;
 
                 const factory = new GpuCoreFactory();
                 const NX = 512, NY = 128;
-                const engine = await factory.build({
-                    dimensions: { nx: NX, ny: NY, nz: 1 },
-                    chunks: { x: 1, y: 1 },
-                    boundaries: {},
-                    engine: 'prover',
-                    params: {}
-                }, {
+                const descriptor = {
                     name: 'prover',
                     version: '1.0.0',
                     faces: [
@@ -51,39 +31,74 @@
                         { name: 'pingpong', type: 'scalar', isSynchronized: true, isPingPong: true }
                     ],
                     rules: [
-                        { type: 'probe', params: {} }
+                        { type: 'probe', source: 'inline', params: {} }
                     ],
                     requirements: { ghostCells: 1, pingPong: true }
-                });
+                };
+
+                const engine = await factory.build({
+                    dimensions: { nx: NX, ny: NY, nz: 1 },
+                    chunks: { x: 1, y: 1 },
+                    boundaries: {},
+                    engine: 'prover',
+                    params: {}
+                }, descriptor);
+
+                // v6.0 Elite Syntax: Pure shader body (GpuDispatcher will prepend headers)
+                const PROBE_WGSL = `
+                @compute @workgroup_size(1, 1)
+                fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+                    if (id.x == 0 && id.y == 0) {
+                        // Proof 1: Scalar Now (Slot 0)
+                        write_scalar_Now(0, 0, 777.0 + f32(uniforms.tick));
+                        
+                        // Proof 2: PingPong Next (will be Slot 1 at Tick 0)
+                        // LAST_IDX = 66819
+                        write_pingpong_Next(511, 127, 888.0 + f32(uniforms.tick));
+                    }
+                }
+                `;
 
                 const kernels = { probe: PROBE_WGSL };
                 const LAST_IDX = (NX + 2) * (NY + 2) - 1; // 66819
 
+                engine.use(kernels);
+
                 // TICK 0
-                await engine.step(kernels);
+                await engine.step(1);
                 await engine.syncFacesToHost(['scalar', 'pingpong']);
-                const s0 = engine.getFaceData('chunk_0_0_0', 'scalar')[0];
-                const p0 = engine.getFaceData('chunk_0_0_0', 'pingpong', 0)[LAST_IDX];
                 
-                log(`TICK 0: Scalar[0]=${s0}, PP_Slot0[${LAST_IDX}]=${p0}`);
-                if (s0 === 777 && p0 === 888) {
+                const lx = NX + 2;
+                const idx00 = 1 * lx + 1;
+                const idxNN = (NY) * lx + (NX);
+
+                // At Tick 0 (during dispatch), Now=0, Next=1. 
+                // After step(1), tick=1. 
+                const s0_val = engine.getFaceData('chunk_0_0_0', 'scalar', 0)[idx00]; // We wrote to Now(0)
+                const p0_val = engine.getFaceData('chunk_0_0_0', 'pingpong', 1)[idxNN]; // We wrote to Next(1)
+                
+                log(`TICK 0: Scalar[0,0]=${s0_val}, PP_Slot1[511,127]=${p0_val}`);
+                if (s0_val === 777 && p0_val === 888) {
                     log("✓ TICK 0 SUCCESS");
                 } else {
-                    throw new Error(`TICK 0 Fail: s0=${s0}, p0=${p0}`);
+                    throw new Error(`TICK 0 Fail: s0=${s0_val}, p0=${p0_val}`);
                 }
 
                 // TICK 1
-                await engine.step(kernels);
+                await engine.step(1);
                 await engine.syncFacesToHost(['scalar', 'pingpong']);
-                const s1 = engine.getFaceData('chunk_0_0_0', 'scalar')[0];
-                const p1 = engine.getFaceData('chunk_0_0_0', 'pingpong', 1)[LAST_IDX];
+                
+                // At Tick 1 (during dispatch), Now=1, Next=0.
+                // After step(1), tick=2.
+                const s1_val = engine.getFaceData('chunk_0_0_0', 'scalar', 1)[idx00]; // We wrote to Now(1)
+                const p1_val = engine.getFaceData('chunk_0_0_0', 'pingpong', 0)[idxNN]; // We wrote to Next(0)
 
-                log(`TICK 1: Scalar[0]=${s1}, PP_Slot1[${LAST_IDX}]=${p1}`);
-                if (s1 === 778 && p1 === 889) {
+                log(`TICK 1: Scalar[0,0]=${s1_val}, PP_Slot0[511,127]=${p1_val}`);
+                if (s1_val === 778 && p1_val === 889) {
                     log("✓ TICK 1 SUCCESS");
                     log("⭐ DOUBLE-ENDED ALIGNMENT PROOF PASSED ⭐");
                 } else {
-                    throw new Error(`TICK 1 Fail: s1=${s1}, p1=${p1}`);
+                    throw new Error(`TICK 1 Fail: s1=${s1_val}, p1=${p1_val}`);
                 }
 
             } catch (e) {

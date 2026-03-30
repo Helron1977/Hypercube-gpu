@@ -15,7 +15,7 @@
       { "name": "rhs", "type": "field", "isSynchronized": false }
     ],
     "rules": [
-      { "type": "PoissonCore", "source": "/src/kernels/wgsl/PoissonCore.wgsl", "faces": ["phi.read", "phi.write", "rhs"] }
+      { "type": "PoissonCore", "source": "/src/kernels/wgsl/PoissonCore.wgsl", "faces": [] }
     ]
   }
 }

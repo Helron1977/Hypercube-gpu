@@ -8,6 +8,7 @@ describe('SOTA Memory Footprint Analysis', () => {
             chunks: [{ localDimensions: { nx, ny, nz } }],
             dataContract: {
                 getFaceMappings: () => faceNames.map(name => ({ name })),
+                getGlobalMappings: () => [],
                 descriptor: { requirements: { ghostCells: ghosts } }
             }
         } as any;

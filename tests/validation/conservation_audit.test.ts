@@ -109,7 +109,8 @@ describe('Strict Conservation Audits', () => {
         const initialMass = sumTotalMass(initialRho, N);
         
         // Auto init bypass
-        await engine.step({ lbm: LbmCoreSource });
+        engine.use({ lbm: LbmCoreSource });
+        await engine.step(1);
         if ((HypercubeGPUContext as any)._device.queue.onSubmittedWorkDone) {
             await (HypercubeGPUContext as any)._device.queue.onSubmittedWorkDone();
         }
@@ -131,9 +132,7 @@ describe('Strict Conservation Audits', () => {
         engine.syncToDevice(); // CRITICAL: Pousser les données sur le GPU
 
         // Run 1000 steps
-        for(let i=0; i<1000; i++) {
-            await engine.step({ lbm: LbmCoreSource });
-        }
+        await engine.step(1000);
         
         if ((HypercubeGPUContext as any)._device.queue.onSubmittedWorkDone) {
             await (HypercubeGPUContext as any)._device.queue.onSubmittedWorkDone();

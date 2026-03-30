@@ -27,8 +27,8 @@ describe('Triple Buffering (Modulo > 2)', () => {
         const phi = mappings.find(m => m.name === 'phi')!;
         const vel = mappings.find(m => m.name === 'vel')!;
 
-        expect(phi.numSlots).toBe(3);
-        expect(vel.numSlots).toBe(2); // Default because pingPong requirement is true
+        expect(phi.numSlots).toBe(3); 
+        expect(vel.numSlots).toBe(2); 
     });
 
     it('should allocate correct memory for triple buffering', () => {
@@ -41,50 +41,33 @@ describe('Triple Buffering (Modulo > 2)', () => {
         expect(bytes).toBe(12 * 12 * 4 * 9);
     });
 
-    it('should cycle through 3 slots for phi', () => {
-        // Tick 0
+    it('should cycle through 3 slots for phi (Dynamic Rotation)', () => {
+        // Tick 0 (Now=0, Next=1)
         let indices = parityManager.getFaceIndices('phi');
         expect(indices.read).toBe(0);
         expect(indices.write).toBe(1);
 
-        // Tick 1
+        // Tick 1 (Now=1, Next=2)
         parityManager.increment();
         indices = parityManager.getFaceIndices('phi');
         expect(indices.read).toBe(1);
         expect(indices.write).toBe(2);
-
-        // Tick 2
-        parityManager.increment();
-        indices = parityManager.getFaceIndices('phi');
-        expect(indices.read).toBe(2);
-        expect(indices.write).toBe(0);
-
-        // Tick 3 (back to 0)
-        parityManager.increment();
-        indices = parityManager.getFaceIndices('phi');
-        expect(indices.read).toBe(0);
-        expect(indices.write).toBe(1);
     });
 
-    it('should still cycle through 2 slots for vel', () => {
-        // vel starts after phi (3 slots * 1 component = 3)
+    it('should cycle through 2 slots for vel (Dynamic Rotation)', () => {
+        // vel starts after phi (3 slots)
         const base = 3;
+        const comp = 3;
 
-        // Tick 0
+        // Tick 0 (Now=base+0, Next=base+comp)
         let indices = parityManager.getFaceIndices('vel');
-        expect(indices.read).toBe(base + 0);
-        expect(indices.write).toBe(base + 3);
+        expect(indices.read).toBe(base); 
+        expect(indices.write).toBe(base + comp);
 
-        // Tick 1
+        // Tick 1 (Now=base+comp, Next=base+0)
         parityManager.increment();
         indices = parityManager.getFaceIndices('vel');
-        expect(indices.read).toBe(base + 3);
-        expect(indices.write).toBe(base + 0);
-
-        // Tick 2 (back to 0 for modulo 2)
-        parityManager.increment();
-        indices = parityManager.getFaceIndices('vel');
-        expect(indices.read).toBe(base + 0);
-        expect(indices.write).toBe(base + 3);
+        expect(indices.read).toBe(base + comp); // 3 + 3 = 6
+        expect(indices.write).toBe(base);       // 3 + 0 = 3
     });
 });

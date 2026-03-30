@@ -105,7 +105,8 @@ describe('Scientific Probe: GPU Protocol Auditor', () => {
         
         // Manual Mock Injection: Force the values we want to see
         // In a real run, the Dispatcher does this.
-        await engine.step({ probe: PROBE_WGSL }, 1);
+        engine.use({ probe: PROBE_WGSL });
+        await engine.step(1);
         
         // We can't really "run" it here without a real WebGPU, 
         // but this test guarantees the TypeScript/WGSL alignment for development.

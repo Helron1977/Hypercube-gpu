@@ -1,4 +1,3 @@
-
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GpuCoreFactory } from '../../src/GpuCoreFactory';
 import { HypercubeConfig, EngineDescriptor } from '../../src/types';
@@ -53,7 +52,9 @@ describe('Hypercube GPU Core v0.2.0 Upgrades (TDD)', () => {
             faces: [
                 { name: 'rho', type: 'scalar', isSynchronized: true, isPingPong: true, numSlots: 3 }
             ],
-            rules: [{ type: 'step', source: '// void', params: { modulo: 3 }, faces: ['rho.read', 'rho.write'] }],
+            // Order (v6 Pilot): Faces now use universal suffixes Now/Next in headers. 
+            // In the JSON rule.faces, we use the base names, and the dispatcher handles the rest.
+            rules: [{ type: 'step', source: '// void', params: { modulo: 3 }, faces: ['rho'] }],
             requirements: { ghostCells: 1, pingPong: true }
         };
 
@@ -93,13 +94,13 @@ describe('Hypercube GPU Core v0.2.0 Upgrades (TDD)', () => {
         expect(engine).toBeDefined();
     });
 
-    it('should generate WGSL headers with read/write macros', async () => {
+    it('should generate WGSL headers with Now/Next macros', async () => {
         const { config, descriptor } = getTestSetup();
         const engine = await factory.build(config, descriptor, mockDevice);
         
-        const header = engine.getWgslHeader('step');
-        expect(header).toContain('fn read_rho_Read');
-        expect(header).toContain('fn write_rho_Write');
+        const { code: header } = engine.getWgslHeader('step');
+        expect(header).toContain('fn read_rho_Now');
+        expect(header).toContain('fn write_rho_Next');
     });
 
     it('should filter ghost cells with getInnerFaceData()', async () => {
@@ -120,20 +121,20 @@ describe('Hypercube GPU Core v0.2.0 Upgrades (TDD)', () => {
         const { config, descriptor } = getTestSetup();
         const engine = await factory.build(config, descriptor, mockDevice);
         
-        // Tick 0 -> Read 0, Write 1
-        const i0 = engine.parityManager.getFaceIndices('rho', 3);
-        expect(i0.read).toBe(0);
-        expect(i0.write).toBe(1);
+        // Tick 0 -> Now 0, Next 1
+        const i0 = engine.parityManager.getFaceIndices('rho');
+        expect(i0.slotRead).toBe(0);
+        expect(i0.slotWrite).toBe(1);
 
         engine.parityManager.increment(); // Tick 1
-        const i1 = engine.parityManager.getFaceIndices('rho', 3);
-        expect(i1.read).toBe(1);
-        expect(i1.write).toBe(2);
+        const i1 = engine.parityManager.getFaceIndices('rho');
+        expect(i1.slotRead).toBe(1);
+        expect(i1.slotWrite).toBe(2);
 
         engine.parityManager.increment(); // Tick 2
-        const i2 = engine.parityManager.getFaceIndices('rho', 3);
-        expect(i2.read).toBe(2);
-        expect(i2.write).toBe(0);
+        const i2 = engine.parityManager.getFaceIndices('rho');
+        expect(i2.slotRead).toBe(2);
+        expect(i2.slotWrite).toBe(0);
     });
 
     it('should resolve ready() when engine is fully initialized', async () => {

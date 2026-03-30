@@ -79,6 +79,7 @@
 
             L('[4/4] Loading kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/DiffusionCore.wgsl')).text();
+            engine.use({ 'DiffusionCore': wgsl });
             running = true; lt = performance.now();
             L('✓ Simulation running');
             requestAnimationFrame(tick);
@@ -88,10 +89,10 @@
             if (!running) return;
             const k = parseFloat(document.getElementById('paramKappa').value);
             document.getElementById('valKappa').innerText = k.toFixed(2);
-            engine.vGrid.config.params.p0 = k;
-            engine.vGrid.config.params.p1 = 1.0;
+            engine.params.p0 = k;
+            engine.params.p1 = 1.0;
 
-            await engine.step({'DiffusionCore': wgsl}, 4);
+            await engine.step(4);
 
             const res = await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
                 mode: 'single', nx: 256, ny: 256,

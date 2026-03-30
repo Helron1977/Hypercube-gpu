@@ -59,8 +59,8 @@ describe('V5.0.4 Showcase: Atomic Energy Conservation & Dynamic Overrides', () =
         
         // 2. Proof of Atomics in WGSL Header
         const header = engine.getWgslHeader('diffuse');
-        expect(header).toContain('@group(0) @binding(2) var<storage, read_write> dataAtomic: array<atomic<u32>>;');
-        expect(header).toContain('fn atomicAdd_energy_total(x: u32, y: u32, val: f32)');
+        expect(header).toContain('@group(0) @binding(2) var<storage, read_write> dataAtomic: array<atomic<i32>>;');
+        expect(header).toContain('fn atomicAdd_energy_total_Now(x: u32, y: u32, val: f32)');
         expect(header).toContain('_hypercube_atomicAddF32'); // The CAS Loop
 
         // 2. Elite Registration of Kernels

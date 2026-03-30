@@ -37,7 +37,13 @@ describe('ReductionPass', () => {
 
     const mockBuffer = { strideFace: 192, gpuBuffer: {} } as any;
     const mockParity = { currentTick: 0, getFaceIndices: () => ({ read: 0, write: 1, base: 0 }) } as any;
-    const mockPipelineCache = { getPipeline: vi.fn().mockResolvedValue({ getBindGroupLayout: () => ({}) }) } as any;
+    const mockPipelineCache = { 
+        getPipeline: vi.fn().mockResolvedValue({ 
+            pipeline: { getBindGroupLayout: () => ({}) },
+            usesAtomics: true,
+            usesGlobals: false
+        }) 
+    } as any;
     const mockStaging = { 
         ensureBuffers: vi.fn(), 
         getMetadata: () => [{ dataOffset: 0, dataSize: 400, vChunk: mockGrid.chunks[0], uniformOffset: 0 }],

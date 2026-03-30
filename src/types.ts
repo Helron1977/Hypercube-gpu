@@ -55,6 +55,12 @@ export interface EngineFace {
     defaultValue?: number;
 }
 
+export interface EngineGlobal {
+    name: string;
+    type: 'f32' | 'i32' | 'atomic_i32' | 'atomic_f32';
+    count: number; // Number of components (e.g. 2 for Fx, Fy)
+}
+
 export interface NumericalScheme {
     type: string;
     source: string;
@@ -68,6 +74,7 @@ export interface EngineDescriptor<TFaces = any> {
     name: string;
     version: string;
     faces: EngineFace[];
+    globals?: EngineGlobal[];
     rules: NumericalScheme[];
     requirements: {
         ghostCells: number;

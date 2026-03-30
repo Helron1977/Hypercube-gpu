@@ -16,49 +16,57 @@
                 if (!await HypercubeGPUContext.init()) throw new Error("WebGPU Fail");
 
                 const NX = 512, NY = 128;
-                const BEACON_WGSL = `
-                // Redefinition struct Params removed - using inherited uniforms
-                @compute @workgroup_size(16, 16)
-                fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-                    if (id.x >= uniforms.nx || id.y >= uniforms.ny) { return; }
-                    let px = id.x + 1u; let py = id.y + 1u;
-                    let i = py * uniforms.strideRow + px;
-                    
-                    // INJECT BEACON EVERY 100 PIXELS
-                    if (i % 100u == 0u) {
-                        let marker = 1000000.0 + f32(i);
-                        data[uniforms.faces[4] * uniforms.strideFace + i] = marker; 
-                    }
-                }
-                `;
 
-                const factory = new GpuCoreFactory();
-                const engine = await factory.build({
-                    dimensions: { nx: NX, ny: NY, nz: 1 },
-                    chunks: { x: 1, y: 1 },
-                    boundaries: {},
-                    engine: 'beacon',
-                    params: {}
-                }, {
-                    name: 'beacon',
-                    faces: [
-                        { name: 'f0', type: 'scalar', isSynchronized: true },
-                        { name: 'f1', type: 'scalar', isSynchronized: true },
-                        { name: 'f2', type: 'scalar', isSynchronized: true },
-                        { name: 'f3', type: 'scalar', isSynchronized: true },
-                        { name: 'curl', type: 'scalar', isSynchronized: true },
-                        { name: 'f_pp', type: 'population', isSynchronized: true, isPingPong: true }
-                    ],
-                    rules: [{ type: 'beacon', source: BEACON_WGSL, params: {} }],
-                    requirements: { ghostCells: 1, pingPong: true }
-                });
+                 const factory = new GpuCoreFactory();
+                 const descriptor = {
+                     name: 'beacon',
+                     version: '1.0.0',
+                     faces: [
+                         { name: 'f0', type: 'scalar', isSynchronized: true },
+                         { name: 'f1', type: 'scalar', isSynchronized: true },
+                         { name: 'f2', type: 'scalar', isSynchronized: true },
+                         { name: 'f3', type: 'scalar', isSynchronized: true },
+                         { name: 'curl', type: 'scalar', isSynchronized: true },
+                         { name: 'f_pp', type: 'population', isSynchronized: true, isPingPong: true }
+                     ],
+                     rules: [{ type: 'beacon', source: 'inline', params: {} }],
+                     requirements: { ghostCells: 1, pingPong: true }
+                 };
 
-                log(`✓ Engine built. strideRow=${engine.buffer.layout.strideRow}, strideFace=${engine.buffer.strideFace}`);
+                 const engine = await factory.build({
+                     dimensions: { nx: NX, ny: NY, nz: 1 },
+                     chunks: { x: 1, y: 1 },
+                     boundaries: {},
+                     engine: 'beacon',
+                     params: {}
+                 }, descriptor);
 
-                await engine.step({ beacon: BEACON_WGSL });
-                await engine.syncFacesToHost(['curl']);
-                
-                const curlData = engine.getFaceData('chunk_0_0_0', 'curl');
+                 // v6.0 Elite Syntax: Pure shader body
+                 const BEACON_WGSL = `
+                 @compute @workgroup_size(16, 16)
+                 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+                     if (id.x >= uniforms.nx || id.y >= uniforms.ny) { return; }
+                     let px = id.x; let py = id.y;
+                     let i = (py + 1u) * uniforms.strideRow + (px + 1u);
+                     
+                     // INJECT BEACON EVERY 100 PIXELS
+                     if (i % 100u == 0u) {
+                         let marker = 1000000.0 + f32(i);
+                         // Use generated macro for robustness
+                         write_curl_Now(px, py, marker); 
+                     }
+                 }
+                 `;
+
+                 log(`✓ Engine built. strideRow=${engine.buffer.layout.strideRow}, strideFace=${engine.buffer.strideFace}`);
+
+                 engine.use({ beacon: BEACON_WGSL });
+                 await engine.step(1);
+                 await engine.syncFacesToHost(['curl']);
+                 
+                 // At Tick 0 (dispatch), Now=0. After step(1), tick=1. 
+                 // So we must explicitly ask for parity 0 (which corresponds to Now at Tick 0).
+                 const curlData = engine.getFaceData('chunk_0_0_0', 'curl', 0);
                 const strideRow = engine.buffer.layout.strideRow;
                 
                 log("Scanning 'curl' face for beacons...");

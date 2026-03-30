@@ -77,7 +77,8 @@ describe('SOTA Phase 9: LBM Boundary Integrity (Zero-Leakage Audit)', () => {
         engine.setFaceData('chunk_0_0_0', 'rho', rho);
 
         // 2. Step 0 (Init)
-        await engine.step(kernels);
+        engine.use(kernels);
+        await engine.step(1);
 
         // Calculate Initial Mass (M0)
         const calculateMass = (data: Float32Array) => {
@@ -91,9 +92,7 @@ describe('SOTA Phase 9: LBM Boundary Integrity (Zero-Leakage Audit)', () => {
         const m0 = calculateMass(engine.getFaceData('chunk_0_0_0', 'rho'));
 
         // 3. Evolve for 100 steps (SOTA should be 1000+)
-        for(let s=0; s<100; s++) {
-            await engine.step(kernels);
-        }
+        await engine.step(100);
 
         await engine.syncFacesToHost(['rho']);
         const mFinal = calculateMass(engine.getFaceData('chunk_0_0_0', 'rho'));

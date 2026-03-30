@@ -66,7 +66,8 @@ async function runConservationAudit() {
         const engine = await factory.build(config, lbmDescriptor);
 
         // TICK 0 auto-init bypass
-        await engine.step({ lbm: LbmCoreSource }); 
+        engine.use({ lbm: LbmCoreSource });
+        await engine.step(1); 
         await device.queue.onSubmittedWorkDone();
 
         const initialRho = initializeRandomDensity(N);
@@ -107,9 +108,7 @@ async function runConservationAudit() {
         engine.syncToDevice();
 
         print(`Simulating ${steps} discrete WGSL dispatches...`);
-        for(let i=0; i<steps; i++) {
-            await engine.step({ lbm: LbmCoreSource });
-        }
+        await engine.step(steps);
         await device.queue.onSubmittedWorkDone();
 
         // --- DIAGNOSTICS ---

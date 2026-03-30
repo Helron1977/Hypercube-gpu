@@ -80,7 +80,8 @@ describe('Extended Physics Audit (SOTA Validation)', () => {
 
         // We only test pipeline structural integrity here
         // Math execution is skipped in mock, or we'd test real buffer values
-        await engine.step(kernels);
+        engine.use(kernels);
+        await engine.step(1);
         await engine.syncFacesToHost(['vx', 'vy']);
         const vx = engine.getFaceData('chunk_0_0_0', 'vx');
         expect(vx).toBeDefined();
@@ -95,8 +96,8 @@ describe('Extended Physics Audit (SOTA Validation)', () => {
             boundaries: { 
                 left: { role: 'periodic' }, 
                 right: { role: 'periodic' }, 
-                top: { role: 'bounce-back' as unknown as 'wall' }, 
-                bottom: { role: 'bounce-back' as unknown as 'wall' } 
+                top: { role: 'wall' }, 
+                bottom: { role: 'wall' } 
             },
             engine: 'lbm-2d-extended',
             params: {}
@@ -114,7 +115,8 @@ describe('Extended Physics Audit (SOTA Validation)', () => {
         }
         engine.setFaceData('chunk_0_0_0', 'vx', vxData);
 
-        await engine.step(kernels);
+        engine.use(kernels);
+        await engine.step(1);
         await engine.syncFacesToHost(['vx']);
         const vxResult = engine.getFaceData('chunk_0_0_0', 'vx');
         expect(vxResult).toBeDefined();
@@ -129,8 +131,8 @@ describe('Extended Physics Audit (SOTA Validation)', () => {
             boundaries: { 
                 left: { role: 'inflow' }, 
                 right: { role: 'outflow' }, 
-                top: { role: 'bounce-back' as unknown as 'wall' }, 
-                bottom: { role: 'bounce-back' as unknown as 'wall' } 
+                top: { role: 'wall' }, 
+                bottom: { role: 'wall' } 
             },
             engine: 'lbm-2d-extended',
             params: {}
@@ -151,7 +153,8 @@ describe('Extended Physics Audit (SOTA Validation)', () => {
         }
         engine.setFaceData('chunk_0_0_0', 'obstacle', obsData);
 
-        await engine.step(kernels);
+        engine.use(kernels);
+        await engine.step(1);
         await engine.syncFacesToHost(['vx', 'vy']);
         const vxResult = engine.getFaceData('chunk_0_0_0', 'vx');
         const vyResult = engine.getFaceData('chunk_0_0_0', 'vy');

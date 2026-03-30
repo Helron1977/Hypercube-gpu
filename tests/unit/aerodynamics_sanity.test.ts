@@ -104,13 +104,13 @@ describe('Aerodynamics Scientific Sanity', () => {
             expect(f32[8]).toBeCloseTo(1.85, 2); // p0
             expect(f32[9]).toBeCloseTo(0.05, 2); // p1 (U)
             
-            // faces
-            expect(u32[16]).toBe(0); // obstacle
-            expect(u32[17]).toBe(1); // ux (starts at slot 1, after obs)
-            expect(u32[18]).toBe(3); // uy (starts at slot 3, after ux PP)
-            expect(u32[19]).toBe(5); // rho (starts at slot 5, after uy PP)
-            expect(u32[20]).toBe(7); // curl (starts at slot 7, after rho PP)
-            expect(u32[21]).toBe(9); // f (starts at slot 9, after curl PP)
+            // faces (Unified Dynamic Rotation Mapping)
+            expect(u32[16]).toBe(0); // obstacle (Base=0)
+            expect(u32[17]).toBe(1); // ux_Now (base 1 + offsetNow 0)
+            expect(u32[18]).toBe(2); // ux_Next (base 1 + offsetNext 1)
+            expect(u32[19]).toBe(3); // uy_Now (base 3 + offsetNow 0)
+            expect(u32[20]).toBe(4); // uy_Next (base 3 + offsetNext 1)
+            expect(u32[21]).toBe(5); // rho_Now (base 5 + offsetNow 0)
         }
     });
 });

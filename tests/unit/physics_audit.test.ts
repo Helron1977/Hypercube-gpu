@@ -41,9 +41,11 @@ describe('Hypercube Physics Audit', () => {
     } as unknown as GPUDevice;
 
     HypercubeGPUContext.setDevice(mockDevice);
-    const kernelsDir = path.join(__dirname, '../../src/kernels/wgsl');
-
+    const kernelsDir = path.join(__dirname, '../kernels');
+    const srcKernelsDir = path.join(__dirname, '../../src/kernels/wgsl');
+    
     const loadKernel = (name: string) => fs.readFileSync(path.join(kernelsDir, name), 'utf-8');
+    const loadSrcKernel = (name: string) => fs.readFileSync(path.join(srcKernelsDir, name), 'utf-8');
 
     it('should verify D3Q19 LBM 3D numerical transformation', async () => {
         const descriptor: EngineDescriptor = {
@@ -69,12 +71,13 @@ describe('Hypercube Physics Audit', () => {
         };
 
         const engine = await factory.build(config, descriptor);
-        const kernels = { 'lbm3d': loadKernel('Lbm3DCore.wgsl') };
+        const kernels = { 'lbm3d': loadKernel('Lbm3DCore.test.wgsl') };
 
         const rhoData = new Float32Array(10 * 10 * 6).fill(1.0);
         engine.setFaceData('chunk_0_0_0', 'rho', rhoData);
         
-        await engine.step(kernels);
+        engine.use(kernels);
+        await engine.step(1);
         await engine.syncFacesToHost(['rho', 'vx']);
         
         const resRho = engine.getFaceData('chunk_0_0_0', 'rho');
@@ -104,13 +107,14 @@ describe('Hypercube Physics Audit', () => {
         };
 
         const engine = await factory.build(config, descriptor);
-        const kernels = { 'fdtd': loadKernel('FdtdCore.wgsl') };
+        const kernels = { 'fdtd': loadSrcKernel('FdtdCore.wgsl') };
 
         const ezData = new Float32Array(18 * 18).fill(0);
         ezData[9 * 18 + 9] = 1.0; 
         engine.setFaceData('chunk_0_0_0', 'ez', ezData);
 
-        await engine.step(kernels);
+        engine.use(kernels);
+        await engine.step(1);
         await engine.syncFacesToHost(['hx', 'hy']);
 
         const hx = engine.getFaceData('chunk_0_0_0', 'hx');
@@ -141,14 +145,15 @@ describe('Hypercube Physics Audit', () => {
         };
 
         const engine = await factory.build(config, descriptor);
-        const kernels = { 'jfa': loadKernel('JfaCore.wgsl') };
+        const kernels = { 'jfa': loadSrcKernel('JfaCore.wgsl') };
 
         const seedData = new Float32Array(18 * 18).fill(-1);
         seedData[5 * 18 + 5] = 5 * 16 + 5;
         seedData[12 * 18 + 12] = 12 * 16 + 12;
         engine.setFaceData('chunk_0_0_0', 'seed', seedData, true);
 
-        await engine.step(kernels);
+        engine.use(kernels);
+        await engine.step(1);
         await engine.syncFacesToHost(['seed']);
 
         const res = engine.getFaceData('chunk_0_0_0', 'seed');

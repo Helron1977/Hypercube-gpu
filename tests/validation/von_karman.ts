@@ -49,11 +49,11 @@ async function runVonKarmanAudit(onFrame?: (data: Float32Array, nx: number, ny: 
         name: 'von-karman-lbm',
         version: '0.1.0',
         faces: [
-            { name: 'type', type: 'mask',       isSynchronized: false, isPingPong: false },
-            { name: 'ux',   type: 'scalar',     isSynchronized: true,  isPingPong: false },
-            { name: 'uy',   type: 'scalar',     isSynchronized: true,  isPingPong: false },
-            { name: 'rho',  type: 'scalar',     isSynchronized: true,  isPingPong: false },
-            { name: 'curl', type: 'scalar',     isSynchronized: true,  isPingPong: false },
+            { name: 'obs',  type: 'mask',       isSynchronized: false, isPingPong: false },
+            { name: 'ux',   type: 'scalar',     isSynchronized: true,  isPingPong: true },
+            { name: 'uy',   type: 'scalar',     isSynchronized: true,  isPingPong: true },
+            { name: 'rho',  type: 'scalar',     isSynchronized: true,  isPingPong: true },
+            { name: 'curl', type: 'scalar',     isSynchronized: true,  isPingPong: true },
             { name: 'f',    type: 'population', isSynchronized: true,  isPingPong: true }
         ],
         requirements: { ghostCells: 1, pingPong: true },
@@ -67,12 +67,15 @@ async function runVonKarmanAudit(onFrame?: (data: Float32Array, nx: number, ny: 
     const parityManager = new ParityManager(vGrid.dataContract);
     const dispatcher = new GpuDispatcher(vGrid, buffer, parityManager);
     const engine = new GpuEngine(vGrid, buffer, dispatcher, parityManager);
+    
+    // Elite API: Register Kernels
+    engine.use({ 'LbmCore': LbmCoreSource });
 
     console.log("[INIT] Voxelizing cylinder obstacle with 2-pixel symmetry break...");
     
     const lx = NX + 2;
     const ly = NY + 2;
-    const typeData = new Float32Array(lx * ly).fill(0.0);
+    const obsData = new Float32Array(lx * ly).fill(0.0);
     const uyData = new Float32Array(lx * ly).fill(0.0);
     
     const cx = NX / 4;
@@ -84,14 +87,14 @@ async function runVonKarmanAudit(onFrame?: (data: Float32Array, nx: number, ny: 
             const dx = x - cx;
             const dy = y - cy;
             if (dx*dx + dy*dy <= radius*radius) {
-                typeData[y * lx + x] = 1.0; 
+                obsData[y * lx + x] = 1.0; 
             }
             // Add tiny noise to uy to seed the instability
             uyData[y * lx + x] = (Math.random() * 0.0001) - 0.00005;
         }
     }
     
-    engine.setFaceData('chunk_0_0_0', 'type', typeData);
+    engine.setFaceData('chunk_0_0_0', 'obs', obsData);
     engine.setFaceData('chunk_0_0_0', 'uy', uyData);
     engine.syncToDevice();
     
@@ -105,7 +108,7 @@ async function runVonKarmanAudit(onFrame?: (data: Float32Array, nx: number, ny: 
     const samples: number[] = [];
 
     for (let s = 0; s < totalSteps; s += interval) {
-        await engine.step({ 'LbmCore': LbmCoreSource }, interval);
+        await engine.step(interval);
         
         await engine.syncFacesToHost(['curl']);
         const curlFace = engine.getFaceData('chunk_0_0_0', 'curl');

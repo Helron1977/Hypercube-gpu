@@ -44,7 +44,7 @@
         import { GpuDemoHelper } from '/tests/renders/GpuDemoHelper.js';
         const canvas = document.getElementById('c');
         const log = document.getElementById('log');
-        let engine, wgsl, lx, running = false, fc = 0, lt = 0;
+        let engine, wgsl, wgslRed, lx, running = false, fc = 0, lt = 0;
         const L = m => { log.textContent += m+'\n'; log.scrollTop=1e6; console.log(m); };
 
         document.getElementById('btnStart').onclick = async () => {
@@ -73,6 +73,8 @@
 
             L('[4/4] Loading kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/PoissonCore.wgsl')).text();
+            wgslRed = await (await fetch('/src/kernels/wgsl/ReductionCore.wgsl')).text();
+            engine.use({ 'PoissonCore': wgsl });
             running = true; lt = performance.now();
             L('✓ Solving...');
             requestAnimationFrame(tick);
@@ -81,7 +83,7 @@
         async function tick(now) {
             if (!running) return;
             // 50 Jacobi iterations per frame for fast convergence
-            await engine.step({'PoissonCore': wgsl}, 50);
+            await engine.step(50);
 
             const ri = engine.parityManager.getFaceIndices('phi').read;
             const res = await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {
@@ -92,6 +94,8 @@
             });
             fc++;
             if (now - lt > 500) {
+                const maxVal = await engine.reduceField('phi', wgslRed);
+                document.getElementById('hMax').innerText = Math.abs(maxVal).toFixed(4);
                 document.getElementById('hFps').innerText = Math.round(fc/((now-lt)/1000));
                 fc=0; lt=now;
             }

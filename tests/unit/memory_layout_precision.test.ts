@@ -17,6 +17,7 @@ describe('MemoryLayout: Atomic Split Precision', () => {
                 { name: 'S2', type: 'vector', numComponents: 3, numSlots: 2 }, // idx 2
                 { name: 'A2', type: 'atomic_u32', numComponents: 1, numSlots: 1 }  // idx 3
             ],
+            getGlobalMappings: () => [],
             descriptor: {
                 requirements: { ghostCells: 1 }
             }

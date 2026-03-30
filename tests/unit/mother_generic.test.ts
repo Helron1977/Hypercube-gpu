@@ -38,7 +38,7 @@ describe('Generic Mother Model Integration', () => {
         ]
     };
     const vGrid = new VirtualGrid(config as any, descriptor as any);
-    const mockMB = { gpuBuffer: {}, strideFace: 1024, totalSlotsPerChunk: 2 } as any;
+    const mockMB = { gpuBuffer: {}, strideFace: 1024, totalSlotsPerChunk: 2, layout: { totalStandardSlotsPerChunk: 2 } } as any;
     const mockParity = { getFaceIndices: (n: string) => ({ read: 0, write: 1 }) } as any;
 
     it('should correctly map TensorCore parameters', async () => {

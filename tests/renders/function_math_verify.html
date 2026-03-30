@@ -198,6 +198,7 @@
             engine = await f.build(m.config, m.engine);
             L('[3/3] Loading kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/FunctionCore.wgsl')).text();
+            engine.use({ 'FunctionCore': wgsl });
             running = true; lt = performance.now();
             L('✓ Function evaluating');
             requestAnimationFrame(tick);
@@ -209,11 +210,11 @@
             const freq = parseFloat(document.getElementById('paramFreq').value);
             document.getElementById('valScale').innerText = scale.toFixed(1);
             document.getElementById('valFreq').innerText = freq.toFixed(0);
-            engine.vGrid.config.params.p0 = scale;
-            engine.vGrid.config.params.p1 = freq;
+            engine.params.p0 = scale;
+            engine.params.p1 = freq;
 
             // Step with 1 iteration (static)
-            await engine.step({ 'FunctionCore': wgsl }, 1);
+            await engine.step(1);
 
             const ghosts = m.engine.requirements.ghostCells || 0;
             await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {

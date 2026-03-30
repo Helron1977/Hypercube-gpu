@@ -71,8 +71,8 @@
             engine.setFaceData('chunk_0_0_0', 'uv', seedData, true);
             engine.syncToDevice();
 
-            L('[4/4] Loading kernel...');
             const wgsl = await (await fetch('/src/kernels/wgsl/JfaCore.wgsl')).text();
+            engine.use({ 'JfaCore': wgsl });
 
             // Multi-pass flooding
             let k = 64;
@@ -80,9 +80,9 @@
             while (k >= 1) {
                 document.getElementById('hK').innerText = k;
                 document.getElementById('hStep').innerText = ++pass;
-                engine.vGrid.config.params.p0 = k;
+                engine.params.p0 = k;
 
-                await engine.step({'JfaCore': wgsl}, 1);
+                await engine.step(1);
 
                 const ri = engine.parityManager.getFaceIndices('uv').read;
                 await GpuDemoHelper.renderToCanvas(engine.dispatcher.device, engine.buffer.gpuBuffer, canvas, {

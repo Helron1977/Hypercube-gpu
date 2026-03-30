@@ -106,9 +106,9 @@ describe('SOTA Physics Audit: FDTD Maxwell Energy Conservation', () => {
         // For Vitest, we'll verify it doesn't crash and the pipeline is sound.
         // A true SOTA audit would run on a real GPU adapter.
         
-        for(let step=0; step<10; step++) {
-            await engine.step(kernels);
-        }
+        // 3. Evolve for 100 steps and verify conservation
+        engine.use(kernels);
+        await engine.step(10);
 
         await engine.syncFacesToHost(['ez', 'hx', 'hy']);
         const eFinal = calculateEnergy();

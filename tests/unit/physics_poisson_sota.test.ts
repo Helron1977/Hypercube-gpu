@@ -86,9 +86,8 @@ describe('SOTA Physics Audit: Poisson Convergence', () => {
         engine.setFaceData('chunk_0_0_0', 'rhs', rhsData);
 
         // 2. Perform 500 Jacobi iterations
-        for(let i=0; i<10; i++) {
-            await engine.step(kernels);
-        }
+        engine.use(kernels);
+        await engine.step(10);
 
         await engine.syncFacesToHost(['phi1']);
         const result = engine.getFaceData('chunk_0_0_0', 'phi1');

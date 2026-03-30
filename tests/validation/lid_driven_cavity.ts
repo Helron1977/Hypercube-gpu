@@ -45,11 +45,11 @@ async function runLDCAudit(Re: number = 1000) {
         name: 'lbm-2d-ldc',
         version: '0.1.0',
         faces: [
-            { name: 'type', type: 'mask',       isSynchronized: false, isPingPong: false }, // f0
-            { name: 'ux',   type: 'scalar',     isSynchronized: true,  isPingPong: false }, // f1
-            { name: 'uy',   type: 'scalar',     isSynchronized: true,  isPingPong: false }, // f2
-            { name: 'rho',  type: 'scalar',     isSynchronized: true,  isPingPong: false }, // f3
-            { name: 'curl', type: 'scalar',     isSynchronized: true,  isPingPong: false }, // f4
+            { name: 'obs',  type: 'mask',       isSynchronized: false, isPingPong: false }, // f0
+            { name: 'ux',   type: 'scalar',     isSynchronized: true,  isPingPong: true },  // f1
+            { name: 'uy',   type: 'scalar',     isSynchronized: true,  isPingPong: true },  // f2
+            { name: 'rho',  type: 'scalar',     isSynchronized: true,  isPingPong: true },  // f3
+            { name: 'curl', type: 'scalar',     isSynchronized: true,  isPingPong: true },  // f4
             { name: 'f',    type: 'population', isSynchronized: true,  isPingPong: true }  // f5
         ],
         requirements: { ghostCells: 1, pingPong: true },
@@ -69,8 +69,9 @@ async function runLDCAudit(Re: number = 1000) {
     const checkInterval = 5000;
     const maxSteps = 200000;
     
+    engine.use({ 'LbmCore': LbmCoreSource });
     for (let i = 0; i < maxSteps; i += checkInterval) {
-        await engine.step({ 'LbmCore': LbmCoreSource }, checkInterval);
+        await engine.step(checkInterval);
         
         // Audit stability: Check for NaNs
         await engine.syncFacesToHost(['ux']);

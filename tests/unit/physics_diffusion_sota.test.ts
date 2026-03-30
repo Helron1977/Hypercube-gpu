@@ -88,9 +88,8 @@ describe('SOTA Physics Audit: Thermal Diffusion Spreading', () => {
 
         // 2. Evolve for 100 steps
         // we use 10 for quick unit test, would be 100 in SOTA report
-        for(let step=0; step<10; step++) {
-            await engine.step(kernels);
-        }
+        engine.use(kernels);
+        await engine.step(10);
 
         await engine.syncFacesToHost(['t0']);
         const tFinal = engine.getFaceData('chunk_0_0_0', 't0');
