@@ -10,7 +10,19 @@ import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
  * Factory for creating GpuEngine instances from descriptors.
  */
 export class GpuCoreFactory {
-    public async build<TParams = any, TFaces = any>(config: HypercubeConfig<TParams>, engine: EngineDescriptor<TFaces>, mockDevice?: any): Promise<GpuEngine<TParams, TFaces>> {
+    public async build<TParams extends Record<string, number> = any, TFaces = any>(
+        config: HypercubeConfig<TParams>, 
+        engine: EngineDescriptor<TFaces>, 
+        mockDevice?: any,
+        sharedOptions?: {
+            gpuBuffer?: GPUBuffer,
+            gpuAtomicBuffer?: GPUBuffer,
+            gpuGlobalBuffer?: GPUBuffer,
+            byteOffset?: number,
+            atomicOffset?: number,
+            globalOffset?: number
+        }
+    ): Promise<GpuEngine<TParams, TFaces>> {
         if (mockDevice) {
             await HypercubeGPUContext.init(mockDevice);
         } else if (!HypercubeGPUContext.isInitialized) {
@@ -19,7 +31,17 @@ export class GpuCoreFactory {
 
         const vGrid = new VirtualGrid(config, engine);
         const parityManager = new ParityManager(vGrid.dataContract);
-        const buffer = new MasterBuffer(vGrid, parityManager, mockDevice);
+        const buffer = new MasterBuffer(
+            vGrid, 
+            parityManager, 
+            mockDevice,
+            sharedOptions?.gpuBuffer,
+            sharedOptions?.gpuAtomicBuffer,
+            sharedOptions?.gpuGlobalBuffer,
+            sharedOptions?.byteOffset,
+            sharedOptions?.atomicOffset,
+            sharedOptions?.globalOffset
+        );
         const dispatcher = new GpuDispatcher(vGrid, buffer, parityManager, mockDevice);
 
         return new GpuEngine(vGrid, buffer, dispatcher, parityManager);

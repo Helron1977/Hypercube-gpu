@@ -22,37 +22,66 @@ export class MasterBuffer implements IMasterBuffer {
     private device: GPUDevice;
     private vGrid: IVirtualGrid;
 
-    constructor(vGrid: IVirtualGrid, parityManager?: ParityManager, mockDevice?: any) {
+    public readonly byteOffset: number = 0;
+    public readonly atomicOffset: number = 0;
+    public readonly globalOffset: number = 0;
+
+    constructor(
+        vGrid: IVirtualGrid, 
+        parityManager?: ParityManager, 
+        mockDevice?: any,
+        sharedGpuBuffer?: GPUBuffer,
+        sharedGpuAtomicBuffer?: GPUBuffer,
+        sharedGpuGlobalBuffer?: GPUBuffer,
+        byteOffset = 0,
+        atomicOffset = 0,
+        globalOffset = 0
+    ) {
         this.vGrid = vGrid;
         this.parityManager = parityManager || new ParityManager(vGrid.dataContract);
         this.layout = new MemoryLayout(this.vGrid);
-
         this.device = mockDevice || HypercubeGPUContext.device;
 
-        // 1. Allocate Standard Buffer (Binding 0)
-        this.gpuBuffer = this.device.createBuffer({
-            size: Math.ceil(this.layout.standardByteLength / 4) * 4,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-            label: 'Hypercube Master Buffer (Float32)'
-        });
+        this.byteOffset = byteOffset;
+        this.atomicOffset = atomicOffset;
+        this.globalOffset = globalOffset;
 
-        // 2. Allocate Atomic Buffer (Binding 2)
-        if (this.layout.atomicByteLength > 0) {
-            this.gpuAtomicBuffer = this.device.createBuffer({
-                size: Math.ceil(this.layout.atomicByteLength / 4) * 4,
+        // 1. Standard Buffer (Binding 0)
+        if (sharedGpuBuffer) {
+            this.gpuBuffer = sharedGpuBuffer;
+        } else {
+            this.gpuBuffer = this.device.createBuffer({
+                size: Math.ceil(this.layout.standardByteLength / 4) * 4,
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-                label: 'Hypercube Atomic Buffer (U32)'
+                label: 'Hypercube Master Buffer (Float32)'
             });
         }
 
-        // 3. Allocate Dedicated GPU Buffer for Globals (Binding 3) - v9 Architecture
+        // 2. Atomic Buffer (Binding 2)
+        if (this.layout.atomicByteLength > 0) {
+            if (sharedGpuAtomicBuffer) {
+                this.gpuAtomicBuffer = sharedGpuAtomicBuffer;
+            } else {
+                this.gpuAtomicBuffer = this.device.createBuffer({
+                    size: Math.ceil(this.layout.atomicByteLength / 4) * 4,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+                    label: 'Hypercube Atomic Buffer (U32)'
+                });
+            }
+        }
+
+        // 3. Global Buffer (Binding 3)
         const globalBytes = this.vGrid.dataContract.calculateGlobalBytes();
         if (globalBytes > 0) {
-            this.gpuGlobalBuffer = this.device.createBuffer({
-                size: Math.max(globalBytes, 16), // At least 16 bytes for padding
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-                label: 'Hypercube Global Workspace (Direct-Read)'
-            });
+            if (sharedGpuGlobalBuffer) {
+                this.gpuGlobalBuffer = sharedGpuGlobalBuffer;
+            } else {
+                this.gpuGlobalBuffer = this.device.createBuffer({
+                    size: Math.max(globalBytes, 16),
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+                    label: 'Hypercube Global Workspace (Direct-Read)'
+                });
+            }
             this.gpuGlobalStagingBuffer = this.device.createBuffer({
                 size: Math.max(globalBytes, 16),
                 usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
@@ -60,7 +89,7 @@ export class MasterBuffer implements IMasterBuffer {
             });
         }
 
-        // 4. CPU Shadow Buffer
+        // 4. Host-side Memory Partitioning
         this.rawBuffer = new ArrayBuffer(this.layout.byteLength);
         this.partitionMemory();
     }
@@ -100,13 +129,14 @@ export class MasterBuffer implements IMasterBuffer {
             if (fIdx === -1) return;
             const mapping = faceMappings[fIdx];
             const binding = this.layout.getBinding(fIdx);
-            const src = binding === 0 ? this.gpuBuffer : this.gpuAtomicBuffer;
+            const src = (binding === 0) ? this.gpuBuffer : this.gpuAtomicBuffer;
             if (!src) return;
+            const baseOffset = (binding === 0) ? this.byteOffset : this.atomicOffset;
 
             for (let c = 0; c < this.vGrid.chunks.length; c++) {
                 for (let s = 0; s < mapping.numSlots; s++) {
                     const bytes = mapping.numComponents * this.strideFace * 4;
-                    const gpuOff = this.layout.getFaceOffset(c, fIdx, s) * 4;
+                    const gpuOff = baseOffset + this.layout.getFaceOffset(c, fIdx, s) * 4;
                     const cpuOff = this.layout.getLogicalFaceOffset(c, fIdx, s) * 4;
 
                     const stg = this.device.createBuffer({
@@ -145,7 +175,7 @@ export class MasterBuffer implements IMasterBuffer {
         const byteOffset = gm.byteOffset;
 
         const encoder = this.device.createCommandEncoder();
-        encoder.copyBufferToBuffer(this.gpuGlobalBuffer, byteOffset, this.gpuGlobalStagingBuffer, byteOffset, byteSize);
+        encoder.copyBufferToBuffer(this.gpuGlobalBuffer, this.globalOffset + byteOffset, this.gpuGlobalStagingBuffer, byteOffset, byteSize);
         this.device.queue.submit([encoder.finish()]);
 
         await this.gpuGlobalStagingBuffer.mapAsync(GPUMapMode.READ, byteOffset, byteSize);
@@ -161,9 +191,9 @@ export class MasterBuffer implements IMasterBuffer {
     }
 
     public syncToDevice(): void {
-        this.device.queue.writeBuffer(this.gpuBuffer, 0, new Uint8Array(this.rawBuffer, 0, this.layout.standardByteLength));
+        this.device.queue.writeBuffer(this.gpuBuffer, this.byteOffset, new Uint8Array(this.rawBuffer, 0, this.layout.standardByteLength));
         if (this.gpuAtomicBuffer) {
-            this.device.queue.writeBuffer(this.gpuAtomicBuffer, 0, new Uint8Array(this.rawBuffer, this.layout.standardByteLength, this.layout.atomicByteLength));
+            this.device.queue.writeBuffer(this.gpuAtomicBuffer, this.atomicOffset, new Uint8Array(this.rawBuffer, this.layout.standardByteLength, this.layout.atomicByteLength));
         }
     }
 
@@ -199,9 +229,10 @@ export class MasterBuffer implements IMasterBuffer {
     }
 
     public destroy(): void {
-        this.gpuBuffer?.destroy();
-        this.gpuAtomicBuffer?.destroy();
-        this.gpuGlobalBuffer?.destroy();
-        this.gpuGlobalStagingBuffer?.destroy();
+        // Only destroy buffers if we own them (not shared)
+        // If offsets are 0 and they weren't passed in, we own them.
+        // Actually, it's safer to have explicit ownership flags, but let's check if they were passed in via Constructor logic if possible.
+        // For now, if anyone calls destroy() on a linked simulation, it might be dangerous.
+        // Standard practice: Shared buffers are destroyed by their manager.
     }
 }

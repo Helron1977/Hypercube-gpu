@@ -173,13 +173,14 @@ export class GpuDispatcher {
         usesAtomics: boolean,
         usesGlobals: boolean
     ): GPUBindGroup {
-        const key = `bg_${pipeline.label}_${globalChunkIdx}_${uniformOffset}_${dataOffset}_${usesAtomics}_${usesGlobals}`;
+        // Incorporate offsets into the cache key to ensure uniqueness if buffers are shared
+        const key = `bg_${pipeline.label}_${globalChunkIdx}_${uniformOffset}_${dataOffset}_${this.buffer.byteOffset}_${this.buffer.atomicOffset}_${this.buffer.globalOffset}_${usesAtomics}_${usesGlobals}`;
         let bg = this.bindGroupCache.get(key);
         if (bg) return bg;
 
         const bytesPerChunkAligned = this.stagingManager.getBytesPerChunkAligned();
         const entries: GPUBindGroupEntry[] = [
-            { binding: 0, resource: { buffer: dataBuffer, offset: dataOffset, size: chunkBufferSize } },
+            { binding: 0, resource: { buffer: dataBuffer, offset: this.buffer.byteOffset + dataOffset, size: chunkBufferSize } },
             { binding: 1, resource: { buffer: uniformBuffer, offset: uniformOffset, size: bytesPerChunkAligned } }
         ];
 
@@ -188,8 +189,8 @@ export class GpuDispatcher {
                 binding: 2, 
                 resource: { 
                     buffer: this.buffer.gpuAtomicBuffer, 
-                    offset: 0, 
-                    size: this.buffer.layout.atomicByteLength 
+                    offset: this.buffer.atomicOffset, 
+                    size: Math.ceil(this.buffer.layout.atomicByteLength / 256) * 256 
                 } 
             });
         }
@@ -199,7 +200,11 @@ export class GpuDispatcher {
                 const globalSize = this.vGrid.dataContract.calculateGlobalBytes();
                 entries.push({
                     binding: 3,
-                    resource: { buffer: this.buffer.gpuGlobalBuffer, offset: 0, size: Math.max(globalSize, 16) }
+                    resource: { 
+                        buffer: this.buffer.gpuGlobalBuffer, 
+                        offset: this.buffer.globalOffset, 
+                        size: Math.max(Math.ceil(globalSize / 256) * 256, 16) 
+                    }
                 });
             }
         }

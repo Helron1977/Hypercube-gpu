@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8">
@@ -8,6 +8,9 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap"
     rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
   <style>
     :root {
       --font-sans: 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -696,10 +699,6 @@ loop();
         </div>
       </div>
     </div>
-_uv_Next(x,y,val)</div>
-        </div>
-      </div>
-    </div>
 
     <!-- PANEL 5 : Data Extraction -->
     <div class="panel" id="p5">
@@ -810,69 +809,69 @@ setInterval(updateHUD, 1000);</pre>
     const faceData = {
       scalar: {
         label: 'scalar',
-        desc: '1 float par cellule. Pour densité (rho), température, scalaire dérivé.',
+        desc: '1 float per cell. Used for density (rho), temperature, or derived scalar fields.',
         macros: [
-          { m: 'read_rho(x, y) → f32', n: 'sans pingPong' },
-          { m: 'write_rho(x, y, val)', n: 'sans pingPong' },
-          { m: 'read_rho_Now(x, y) → f32', n: 'avec pingPong' },
-          { m: 'write_rho_Next(x, y, val)', n: 'avec pingPong' }
+          { m: 'read_rho_Now(x, y) → f32', n: 'Non-synchronized or static' },
+          { m: 'write_rho_Now(x, y, val)', n: 'Direct buffer access' },
+          { m: 'read_rho_Now(x, y) → f32', n: 'With Temporal Parity (pingPong)' },
+          { m: 'write_rho_Next(x, y, val)', n: 'Writes to the inactive parity slot' }
         ],
         json: '{ "name": "rho", "type": "scalar", "isSynchronized": true }'
       },
       field: {
         label: 'field',
-        desc: 'Champ physique continu. Supporte pingPong et numSlots (triple buffering pour wave 2nd ordre).',
+        desc: 'Continuous physical field. Supports Temporal Parity and multi-slot buffering for 2nd order convergence.',
         macros: [
-          { m: 'read_phi_Now(x, y) → f32', n: 'avec pingPong' },
-          { m: 'write_phi_Next(x, y, val)', n: 'avec pingPong' },
-          { m: 'read_phi_Old(x, y) → f32', n: 'avec numSlots: 3' }
+          { m: 'read_phi_Now(x, y) → f32', n: 'Current simulation tick' },
+          { m: 'write_phi_Next(x, y, val)', n: 'Target for next tick calculation' },
+          { m: 'read_phi_Old(x, y) → f32', n: 'Mandatory for wave/dynamic calculations (numSlots: 3)' }
         ],
         json: '{ "name": "phi", "type": "field", "isSynchronized": true, "isPingPong": true }'
       },
       population: {
         label: 'population',
-        desc: 'Multi-composantes (D2Q9 = 9, D3Q19 = 19, D3Q27 = 27). Le Dispatcher gère les offsets de plans automatiquement.',
+        desc: 'Multi-component distribution (D2Q9=9, D3Q19=19, D3Q27=27). Dispatcher manages plane offsets automatically.',
         macros: [
-          { m: 'read_f_Now(x, y, d) → f32', n: 'd = direction 0..N-1' },
-          { m: 'write_f_Next(x, y, d, val)', n: 'plane-stride v6.0' },
-          { m: 'read3D_f_Now(x, y, z, d) → f32', n: '3D — D3Q27' }
+          { m: 'read_f_Now(x, y, d) → f32', n: 'd = direction index 0..N-1' },
+          { m: 'write_f_Next(x, y, d, val)', n: 'Plane-stride v6.0 optimized storage' },
+          { m: 'read_f_Now(x, y, z, d) → f32', n: '3D Volumetric distribution — D3Q27' }
         ],
         json: '{ "name": "f", "type": "population", "isSynchronized": true, "numComponents": 9 }'
       },
       mask: {
         label: 'mask',
-        desc: 'Donnée statique ou dynamique non synchronisée. Typiquement en lecture seule (obstacles, zones, conditions initiales).',
+        desc: 'Static or un-synchronized auxiliary data. Typically read-only (obstacles, initial conditions).',
         macros: [
-          { m: 'read_obs(x, y) → f32', n: 'retourne 0.0 ou 1.0' }
+          { m: 'read_obs_Now(x, y) → f32', n: 'Returns normalized 0.0 or 1.0 (binary or signed distance)' }
         ],
         json: '{ "name": "obs", "type": "mask", "isSynchronized": false, "isReadOnly": true }'
       },
       vector: {
         label: 'vector',
-        desc: '3 floats par cellule (x, y, z). numComponents=3 déduit automatiquement.',
+        desc: '3 floats per cell (x, y, z). Component count inferred automatically.',
         macros: [
-          { m: 'read_vel(x, y, 0) → f32', n: 'composante x' },
-          { m: 'read_vel(x, y, 1) → f32', n: 'composante y' },
-          { m: 'write_vel(x, y, 2, val)', n: 'composante z' }
+          { m: 'read_vel_Now(x, y, 0) → f32', n: 'X-component access' },
+          { m: 'read_vel_Now(x, y, 1) → f32', n: 'Y-component access' },
+          { m: 'write_vel_Now(x, y, 2, val)', n: 'Z-component access' }
         ],
         json: '{ "name": "vel", "type": "vector", "isSynchronized": false }'
       },
       atomic_u32: {
         label: 'atomic_u32',
-        desc: 'Compteurs et flags thread-safe. Vit dans Binding 2 (dataAtomic). Opérations entières natives.',
+        desc: 'Thread-safe 32-bit integer counters/flags. Resides in Binding 2 (dataAtomic).',
         macros: [
-          { m: 'atomicAdd_counter(x, y, val) → u32', n: 'retourne la valeur avant' },
-          { m: 'atomicLoad_counter(x, y) → u32', n: 'lecture atomique' },
-          { m: 'atomicStore_counter(x, y, val)', n: 'écriture atomique' }
+          { m: 'atomicAdd_counter_Now(x, y, val) → u32', n: 'Returns previous value (Pre-increment)' },
+          { m: 'atomicLoad_counter_Now(x, y) → u32', n: 'Deterministic atomic read' },
+          { m: 'atomicStore_counter_Now(x, y, val)', n: 'Atomic write to field' }
         ],
         json: '{ "name": "counter", "type": "atomic_u32", "isSynchronized": false }'
       },
       atomic_f32: {
         label: 'atomic_f32',
-        desc: 'Accumulation f32 thread-safe via CAS loop interne (invisible pour l\'utilisateur). Vit dans Binding 2. Idéal pour énergie, forces, gradients.',
+        desc: 'Thread-safe f32 accumulation via internal CAS loop. Binding 2. Optimal for force reduction and gradients.',
         macros: [
-          { m: 'atomicAdd_flux(x, y, val)', n: 'CAS loop f32 — aucun cast visible' },
-          { m: 'atomicLoad_flux(x, y) → f32', n: 'lecture atomique avec reconversion' }
+          { m: 'atomicAdd_flux_Now(x, y, val)', n: 'High-performance f32 CAS loop' },
+          { m: 'atomicLoad_flux_Now(x, y) → f32', n: 'Atomic f32 retrieval' }
         ],
         json: '{ "name": "flux", "type": "atomic_f32", "isSynchronized": false }'
       }
