@@ -1,3 +1,13 @@
+## [6.0.3] - 2026-03-31
+
+### Fixed
+- **NPM Typings Mapping** : Corrected the `types` entry in `package.json` to point correctly to the emitted `dist/src/` directory.
+
+## [6.0.2] - 2026-03-31
+
+### Fixed
+- **NPM Package Payload** : Fixed build race-condition preventing TypeScript declaration (`.d.ts`) emission in NPM tarball. Revised build sequence to `vite build && tsc`.
+
 ## [6.0.1] - 2026-03-31
 
 ### Added

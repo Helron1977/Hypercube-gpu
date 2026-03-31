@@ -1,10 +1,10 @@
 {
   "name": "hypercube-gpu-core",
-  "version": "6.0.1",
+  "version": "6.0.3",
   "description": "Deterministic WebGPU compute core with Multi-Cube coupled physics support.",
   "type": "module",
   "main": "./dist/hypercube-gpu-core.js",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/src/index.d.ts",
   "files": [
     "dist",
     "README.md",
@@ -13,7 +13,7 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/src/index.d.ts",
       "import": "./dist/hypercube-gpu-core.js"
     }
   },
@@ -23,7 +23,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build && tsc",
     "test": "npm run test:unit",
     "test:unit": "vitest run tests/unit",
     "test:validation": "node scripts/run_webgpu_suite.mjs --test=all",
