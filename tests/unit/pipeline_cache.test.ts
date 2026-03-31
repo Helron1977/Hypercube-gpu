@@ -13,7 +13,12 @@ describe('PipelineCache', () => {
         createComputePipelineAsync: vi.fn().mockResolvedValue({ label: 'MockPipeline' })
     } as any;
 
-    const getHeader = (type: string) => `header_${type}\n`;
+    const getHeader = (type: string, source: string) => ({
+        code: `header_${type}\n`,
+        usesAtomics: false,
+        usesGlobals: false,
+        toString() { return this.code; }
+    });
 
     it('should generate different hashes for different sources of same length', async () => {
         const spy = vi.spyOn(HypercubeGPUContext, 'createComputePipelineAsync').mockResolvedValue({ label: 'MockPipeline' } as any);

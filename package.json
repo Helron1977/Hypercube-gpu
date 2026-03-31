@@ -1,13 +1,19 @@
 {
   "name": "hypercube-gpu-core",
-  "version": "5.0.2",
-  "description": "Standalone high-performance WebGPU compute core (zero-copy MasterBuffer + declarative topology)",
+  "version": "6.0.1",
+  "description": "Deterministic WebGPU compute core with Multi-Cube coupled physics support.",
   "type": "module",
   "main": "./dist/hypercube-gpu-core.js",
-  "types": "./dist/src/index.d.ts",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "exports": {
     ".": {
-      "types": "./dist/src/index.d.ts",
+      "types": "./dist/index.d.ts",
       "import": "./dist/hypercube-gpu-core.js"
     }
   },
@@ -17,7 +23,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "test": "npm run test:unit",
     "test:unit": "vitest run tests/unit",
     "test:validation": "node scripts/run_webgpu_suite.mjs --test=all",

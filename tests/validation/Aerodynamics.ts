@@ -148,7 +148,7 @@ export class Aerodynamics {
             }
 
             if (s >= SAMPLE_START && s % 50 === 0) {
-                const [fx_raw, fy_raw] = await engine.reduceForces(ReductionForcesSource);
+                const [fx_raw, fy_raw] = await engine.reduceForces();
 
                 // ACCOUNT FOR WGSL SCALE (1000.0)
                 const fx = fx_raw / 1000.0;

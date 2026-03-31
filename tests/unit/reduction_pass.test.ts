@@ -59,7 +59,12 @@ describe('ReductionPass', () => {
         // Result in mock buffer is 1000. 1000 / scale = 1.0
         const results = await pass.reduce(
             mockDevice, mockGrid, mockBuffer, mockParity, 
-            mockPipelineCache, mockStaging, (t) => "header", "source", "phi", 1, scale
+            mockPipelineCache, mockStaging, (t, s) => ({
+                code: "header",
+                usesAtomics: true,
+                usesGlobals: false,
+                toString() { return this.code; }
+            }), "source", "phi", 1, scale
         );
 
         expect(results[0]).toBe(1.0);

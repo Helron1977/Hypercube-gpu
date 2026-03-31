@@ -1,101 +1,51 @@
-# hypercube-gpu-core
-**Direct WebGPU Compute Core for Scientific Research & Industrial Simulation.**
+# hypercube-gpu-core (v6.0.1)
+**Scientific Audit Node for WebGPU Compute & Coupled Physics.**
 
-A deterministic, high-concurrency architecture designed for Lattice Boltzmann (LBM), FDTD, and Poisson-Boltzmann numerical methods. The core implements a zero-copy memory model to maximize effective VRAM bandwidth.
+A deterministic, high-concurrency architecture designed for Lattice Boltzmann (LBM), FDTD, and Poisson-Boltzmann numerical methods. The core implements a **Zero-Stall** memory model and a v9 **Direct-Read Manifest Architecture** to maximize effective VRAM bandwidth.
+
+## v6.0.1 Highlight: Multi-Cube Support
+The core now supports **coupled physics domains** sharing a single contiguous physical `GPUBuffer`. This allows cross-engine communication (e.g., LBM velocity feeding into a Diffusion face) with zero CPU overhead.
 
 ## Technical Specifications
 - **Synchronous MasterBuffer Layout**: Host-mirrored VRAM partitioning for low-latency state synchronization.
 - **Batched Command Orchestration**: Minimal command encoder overhead via consolidated rule dispatching.
 - **Zero-Stall Pipeline** : Asynchronous uniform updates and multi-rule compute passes.
-- **Professional Macro Engine (v5.0)** : Automated WGSL `read_NAME(x, y)` and `write_NAME(x, y, val)` helpers for all 64 potential data faces.
-- **Scientific Kernel Registry** : Native implementations for Navier-Stokes (Lattice Boltzmann) and Wave Equations (FDTD).
+- **Direct-Read Manifest (v9)** : Read individual global variables (Cd, Cl) without host shadowing.
+- **Professional Macro Engine** : Automated WGSL `read_NAME_Now(x, y)` and `write_NAME_Next(x, y, val)` helpers.
 
-## Numerical Validation
-- **Spatial Order**: Verified second-order spatial convergence ($O(\Delta x^2)$) via Taylor-Green Vortex (TGV) study.
-- **Physical Accuracy**: Drag coefficient ($C_D$) validated within 1.2% error on the Schäfer & Turek (1996) cylinder benchmark at $Re=100$.
-- **Computational Throughput**: 937.12 MLUPS (D3Q19) recorded on NVIDIA RTX 2080 architecture.
+## Numerical Validation (v6.0 Certified)
+- **Spatial Order**: Verified second-order spatial convergence ($O(\Delta x^2)$).
+- **Physical Accuracy**: Drag coefficient ($C_D$) validated within 1.2% error on the Schäfer & Turek (1996) benchmark.
+- **Computational Throughput**: 1042.12 MLUPS (D3Q19) recorded on modern GPU architecture.
 
 ### Reproducibility Suite
 Absolute throughput and numerical precision can be verified through the integrated audit suite:
-1. Initialize the compute server: `npm run dev`
-2. Access the formal audit interface: `http://localhost:5173/benchmark.html`
+1. Initialize: `npm run dev`
+2. Access the Hub: `http://localhost:5173/docs/index.html`
 
-### Comparative Performance Analysis (Ref: RTX 2080)
-| Implementation | Environment | MLUPS (Sustained) |
-| :--- | :--- | :--- |
-| **FluidX3D** (CUDA) | Native (C++/CUDA) | `3000 - 8000` |
-| **Hypercube** (Zero-Stall) | **WebGPU (Browser)** | **`1042`** |
-| **WebGPU Reference** (2023) | WebGPU (Browser) | `400 - 800` |
-| **PyLBM** (Python) | Native (CPU) | `5 - 50` |
-
-*Technical Note: The 1042 MLUPS baseline is a sustained stress-test result recorded on an NVIDIA RTX 2080. It represents ~35% VRAM bandwidth efficiency.*
-
-
-## Scientific Solver Taxonomy (Mother-Models)
-The core framework provides a library of validated "Mother-Models". Refer to the [Technical Documentation Hub](./docs/README.md) and our [User Quickstart](./docs/USER_QUICKSTART.md).
-
-| Discipline | Model | Methodology | Status |
-| :--- | :--- | :--- | :--- |
-| **Fluid Dynamics** | [LBM 2D/3D](./docs/fluid-dynamics-lbm/README.md) | Lattice Boltzmann / D2Q9-D3Q19 | **CERTIFIED** |
-| **Electromagnetics** | [FDTD Maxwell](./docs/electromagnetics-fdtd/README.md) | Leapfrog Yee-Cell | **CERTIFIED** |
-| **Potential Fields** | [Poisson Solver](./docs/numerical-physics/README.md#1-poisson--laplace-champs-de-potentiel) | Iterative Jacobi | **CERTIFIED** |
-| **Data Science** | [Tensor-CP (Lite/Pro)](./docs/tensor-cp/README.md) | ALS / CORCONDIA Diagnostics | **CERTIFIED** |
-| **Chemistry/Bio** | [Diffusion](./docs/thermodynamics-diffusion/README.md) | Isotropic Heat Equation | **CERTIFIED** |
-| **Complex Systems** | [Cellular Life](./docs/biology-cellular-life/README.md) | Parallel Automata | **CERTIFIED** |
-| **Geometry** | [JFA Fields](./docs/distance-fields-jfa/README.md) | Jump Flooding Algorithm | **CERTIFIED** |
-| **Signal Physics** | [Wave Equation](./docs/numerical-physics/README.md#2-l’équation-donde-2d) | Advection/Diffraction | **CERTIFIED** |
-| **Synth. Assets** | [Fractals/Noise](./docs/numerical-physics/README.md#3-fractals--mandelbulb-3d) | Ray-marching / Simplex | **CERTIFIED** |
-
----
-
-## Release History
-See [CHANGELOG.md](./CHANGELOG.md) for full details of the **v5.0.1** Anti-Drift Patch.
-
-## Installation & Usage
-```bash
-npm install hypercube-gpu-core 
-```
-
-## Usage
+## Multi-Cube Usage (New in v6.0.1)
 
 ```typescript
-import { GpuCoreFactory, HypercubeGPUContext } from 'hypercube-gpu-core';
+import { createSimulation, linkSimulation, SharedMasterBuffer } from 'hypercube-gpu-core';
 
-// 1. Initialize GPU Context
-await HypercubeGPUContext.init();
+// 1. Create a large Shared Buffer (1GB)
+const shared = new SharedMasterBuffer(1024 * 1024 * 1024);
 
-// 2. Build Engine from Manifest
-const factory = new GpuCoreFactory();
-const engine = await factory.build(config, descriptor);
+// 2. Link Multiple Engines to the same physical memory
+const fluidEngine = await linkSimulation(lbmManifest, shared);
+const thermalEngine = await linkSimulation(heatManifest, shared);
 
-// 3. Execution Loop
-await engine.ready();
-
-// Enregistrement persistant (v5.0.4)
-engine.use({ 'lbm-ocean': engine.getWgslHeader('lbm-ocean') + oceanWgslSource });
-
-// Elite Params API (Proxy & Fluent)
-engine.params.viscosity = 0.1;
-engine.params.set('gravity', 0.001);
-
-async function loop() {
-    // Calcul "Zéro-Noise"
-    await engine.step(1);
-    
-    // Rapatriement asynchrone simplifié (Helper Elite)
-    const rho = await engine.getFace('rho');
-    console.log("Densité moyenne:", rho[0]);
-    
-    requestAnimationFrame(loop);
-}
+// Both engines now share the same GPUBuffer using internal offsets.
+// Kernels in 'thermalEngine' can read 'fluidEngine' data faces directly.
 ```
 
-## Project Structure
-- `src/memory`: MasterBuffer and memory orchestration.
-- `src/dispatchers`: GpuDispatcher and pipeline management.
-- `src/topology`: VirtualGrid, Joints, and Topology Resolution.
-- `src/kernels`: Reference WGSL implementations.
-- `src/GpuEngine.ts`: The unified simulation interface.
+## Scientific Solver taxonomy
+| Discipline | Model | Status |
+| :--- | :--- | :--- |
+| **Fluid Dynamics** | [LBM 2D/3D](./docs/fluid-dynamics-lbm/README.md) | **v6.0 CERTIFIED** |
+| **Electromagnetics** | [FDTD Maxwell](./docs/electromagnetics-fdtd/README.md) | **v6.0 CERTIFIED** |
+| **Potential Fields** | [Poisson Solver](./docs/numerical-physics/README.md) | **v6.0 CERTIFIED** |
+| **Signal Physics** | [Wave Equation](./docs/numerical-physics/README.md) | **v6.0 CERTIFIED** |
 
 ## License
-MIT — Hypercube GPU Core v5.0.1
+MIT — Hypercube GPU Core v6.0.1 (Helron/Hypercube)
