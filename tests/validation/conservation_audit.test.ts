@@ -35,15 +35,6 @@ describe('Strict Conservation Audits', () => {
         return rhoData;
     }
 
-    function sumTotalMass(rhoData: Float32Array, N: number): number {
-        let total = 0.0;
-        for (let y = 1; y <= N; y++) {
-            for (let x = 1; x <= N; x++) {
-                total += rhoData[y * (N+2) + x];
-            }
-        }
-        return total;
-    }
 
     it('Should conserve global mass over 1000 iterations in a closed periodic domain', async () => {
         const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
@@ -92,64 +83,59 @@ describe('Strict Conservation Audits', () => {
         };
 
         const LbmCoreSource = fs.readFileSync(path.join(__dirname, '../../src/kernels/wgsl/LbmCore.wgsl'), 'utf-8');
+        const ReductionCoreSource = fs.readFileSync(path.join(__dirname, '../../src/kernels/wgsl/ReductionCore.wgsl'), 'utf-8');
         const engine = await factory.build(config, lbmDescriptor);
 
-        // FORCE real GPU initialization
-        if (!await HypercubeGPUContext.init()) {
-            console.error("Skipping real GPU execution in test (Hardware not found)");
-            return;
-        }
-
-        (HypercubeGPUContext as any)._device = HypercubeGPUContext.device;
-        if (!HypercubeGPUContext.device || !HypercubeGPUContext.device.queue) {
-            throw new Error("Validation aborted: Physical GPU device queue is required for physics audit.");
-        }
-
+        // --- 1. GPU INITIALIZATION ---
         const initialRho = initializeRandomDensity(N);
-        const initialMass = sumTotalMass(initialRho, N);
         
-        // Auto init bypass
-        engine.use({ lbm: LbmCoreSource });
-        await engine.step(1);
-        if ((HypercubeGPUContext as any)._device.queue.onSubmittedWorkDone) {
-            await (HypercubeGPUContext as any)._device.queue.onSubmittedWorkDone();
-        }
-
-        // Set chaotic density
-        engine.setFaceData('chunk_0_0_0', 'rho', initialRho, true);
+        // Auto init bypass & Kernel Registration
+        await engine.use({ lbm: LbmCoreSource });
         
-        // We must also initialize populations to match rho to be physically valid,
+        // Match populations to initial rho (rest density initialization)
         const w = [4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36];
-        const stride = (N+2)*(N+2);
-        const fData = new Float32Array(stride * 9);
+        const strideFace = engine.buffer.layout.strideFace;
+        const fData = new Float32Array(strideFace * 9);
         for(let idx = 0; idx < initialRho.length; idx++) {
             const rho = initialRho[idx];
             for (let d = 0; d < 9; d++) {
-                fData[d * stride + idx] = rho * w[d];
+                fData[d * strideFace + idx] = rho * w[d];
             }
         }
-        engine.setFaceData('chunk_0_0_0', 'f', fData, true);
-        engine.syncToDevice(); // CRITICAL: Pousser les données sur le GPU
 
-        // Run 1000 steps
-        await engine.step(1000);
+        // Set Data with fillAllPingPong=true to ensure both buffers are synced
+        engine.setFaceData('chunk_0_0_0', 'rho', initialRho, true);
+        engine.setFaceData('chunk_0_0_0', 'f', fData, true);
+        engine.syncToDevice(); 
+
+        // CRITICAL: Tick 0 Step to allow kernel auto-init/calibration
+        await engine.step(1);
+        await (HypercubeGPUContext.device.queue as any).onSubmittedWorkDone?.();
+
+        // --- 2. INITIAL MEASUREMENT (GPU-SIDE) ---
+        const m0 = await engine.reduceField('rho', ReductionCoreSource);
         
-        if ((HypercubeGPUContext as any)._device.queue.onSubmittedWorkDone) {
-            await (HypercubeGPUContext as any)._device.queue.onSubmittedWorkDone();
+        // --- VALIDATION INITIALE (v6.1 Rigorous Audit) ---
+        if (m0 <= 0 || !Number.isFinite(m0)) {
+            throw new Error(`Validation aborted: Initial mass measurement invalid (Got: ${m0}). Check p7 scaling/overflow.`);
         }
 
-        await engine.syncFacesToHost(['rho']);
-        const finalRho = engine.getFaceData('chunk_0_0_0', 'rho');
+        const expectedMass = (N+2) * (N+2) * 1.0;
+        const massError = Math.abs(m0 - expectedMass) / (expectedMass + 1e-12);
         
-        const finalMass = sumTotalMass(finalRho, N);
+        // --- 3. SIMULATION ---
+        const steps = 1000;
+        await engine.step(steps);
+        await (HypercubeGPUContext.device.queue as any).onSubmittedWorkDone?.();
 
-        // Calculate absolute mass difference. FP32 rounding over 1000 steps on 16k cells 
-        // can accumulate around 1e-4 error.
-        const diff = Math.abs(finalMass - initialMass);
-        const relativeError = diff / initialMass;
+        // --- 4. FINAL MEASUREMENT (GPU-SIDE) ---
+        const m1 = await engine.reduceField('rho', ReductionCoreSource);
+        const drift = Math.abs(m1 - m0) / (m0 + 1e-12);
         
-        console.log(`Initial Mass: ${initialMass}, Final Mass: ${finalMass}, Rel Error: ${relativeError}`);
+        console.log(`Initial Mass M(0): ${m0.toFixed(4)}, Final Mass M(${steps}): ${m1.toFixed(4)}, Rel Error: ${drift.toExponential(4)}`);
         
-        expect(relativeError).toBeLessThan(1e-4);
+        // Expect strict conservation (Zero-Stall/Zero-Drift)
+        expect(drift).toBeLessThan(1e-7);
+        expect(massError).toBeLessThan(0.05); // Sanity check for initialization
     });
 });

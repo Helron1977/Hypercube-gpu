@@ -102,10 +102,20 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let ux = momX / rho;
     let uy = momY / rho;
     let omega = uniforms.p0;
+    var f_post = array<f32, 9>();
 
     for (var d = 0u; d < 9u; d = d + 1u) {
         let feq = lbm_feq(rho, ux, uy, d);
-        write_f_Next(px, py, d, pf[d] + omega * (feq - pf[d]));
+        f_post[d] = pf[d] + omega * (feq - pf[d]);
+    }
+
+    // Post-Collision Rebalancing (Zero-Drift Certification)
+    var rho_check = 0.0;
+    for (var d = 0u; d < 9u; d = d + 1u) { rho_check += f_post[d]; }
+    f_post[0] += (rho - rho_check);
+
+    for (var d = 0u; d < 9u; d = d + 1u) {
+        write_f_Next(px, py, d, f_post[d]);
     }
 
     write_rho_Next(px, py, rho);

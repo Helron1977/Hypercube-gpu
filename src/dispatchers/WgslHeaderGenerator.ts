@@ -11,6 +11,7 @@ export interface WgslHeaderResult {
     code: string;
     usesAtomics: boolean;
     usesGlobals: boolean;
+    toString(): string;
 }
 
 export class WgslHeaderGenerator {
@@ -170,7 +171,8 @@ export class WgslHeaderGenerator {
         return {
             code: h,
             usesAtomics,
-            usesGlobals
+            usesGlobals,
+            toString() { return this.code; }
         };
     }
 }

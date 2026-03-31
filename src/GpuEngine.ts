@@ -13,6 +13,7 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
     private bufferPool: Map<string, Float32Array> = new Map();
     private registeredKernels: Record<string, string> = {};
     private persistentOverrides: Partial<TParams> = {};
+    private compilationPending: Promise<void> | null = null;
     public readonly params: TParams & { set: (name: keyof TParams, value: number) => GpuEngine<TParams, TFaces>['params'] };
 
     constructor(
@@ -43,8 +44,14 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
      * Registers simulation kernels persistently.
      * Once registered, step() can be called without passing source code.
      */
-    public use(kernels: Record<string, string>): void {
+    public async use(kernels: Record<string, string>): Promise<void> {
         this.registeredKernels = { ...this.registeredKernels, ...kernels };
+        
+        // v6.0: Trigger Zero-Stall Pre-compilation
+        this.dispatcher.invalidateActiveMetadata();
+        this.compilationPending = this.dispatcher.prepareKernels(this.registeredKernels);
+        await this.compilationPending;
+        this.dispatcher.precomputeDispatchFlags();
     }
 
     /**
@@ -61,6 +68,10 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
      * @param kernels Optional transient kernels (overrides registered ones for this call).
      */
     public async step(paramsOrCount: TParams | number = 1, kernels?: Record<string, string>): Promise<void> {
+        if (this.compilationPending) {
+            await this.compilationPending;
+        }
+
         const activeKernels = kernels || this.registeredKernels;
         if (Object.keys(activeKernels).length === 0) {
             throw new Error("GpuEngine: No kernels registered. Use engine.use() before calling step().");
@@ -198,9 +209,19 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
 
     /**
      * Executes a global reduction (Sum) on a specific face.
+     * v6.1: Dynamic scaling to prevent atomic i32 overflow.
      */
     public async reduceField(faceName: string, source: string): Promise<number> {
-        const results = await this.dispatcher.reduce('Reduction', source, faceName, 1);
+        const { nx, ny, nz } = this.vGrid.dimensions;
+        const totalCells = nx * ny * (nz || 1);
+        
+        // Dynamic Safe Scaling (v6.1):
+        // Scale to keep total sum < 2e9 (i32 limit). 
+        // Max expected sum assumes rho=2.0 per cell for worst-case safety.
+        const safeScale = Math.floor(2000000000 / (totalCells * 2.0));
+        const precisionScale = Math.max(1, Math.min(1000000000, safeScale));
+        
+        const results = await this.dispatcher.reduce('Reduction', source, faceName, 1, precisionScale);
         return results[0];
     }
 

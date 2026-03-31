@@ -13,7 +13,7 @@
       { "name": "fractal", "type": "scalar", "isSynchronized": false }
     ],
     "rules": [
-      { "type": "MandelbulbCore", "source": "/src/kernels/wgsl/MandelbulbCore.wgsl" }
+      { "type": "Mandelbulb3DCore", "source": "/src/kernels/wgsl/MandelbulbCore.wgsl" }
     ]
   }
 }

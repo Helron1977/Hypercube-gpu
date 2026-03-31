@@ -109,7 +109,7 @@ async function runMultiChunkValidation() {
     const lx0 = vGrid.chunks[0].localDimensions.nx + 2;
     const ly0 = vGrid.chunks[0].localDimensions.ny + 2;
     const midY = Math.floor(ny / 2) + 1;
-    const midZ = 1;
+    const midZ = 0; 
 
     const valLeft = ux0[(midZ * ly0 + midY) * lx0 + 128]; // Last real cell of Chunk 0
     const valRight = ux1[(midZ * ly0 + midY) * lx0 + 1];  // First real cell of Chunk 1

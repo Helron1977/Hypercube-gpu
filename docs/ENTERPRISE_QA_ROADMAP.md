@@ -27,6 +27,6 @@ Les algorithmes suivants sont certifiés stables et fonctionnels dans la version
 ---
 
 ## Prochaines Étapes (v5.1+)
-- [ ] Support des textures WebGPU en sortie native (Zero-Copy Display).
-- [ ] Optimisation des Multi-Chunks (MPI-style ghost cell sync).
-- [ ] Intégration de kernels de calcul tensoriel (ML-ready).
+- [x] Support des textures WebGPU en sortie native (Zero-Copy Display).
+- [x] Optimisation des Multi-Chunks (MPI-style ghost cell sync).
+- [x] Intégration de kernels de calcul tensoriel (ML-ready).

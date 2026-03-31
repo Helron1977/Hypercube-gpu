@@ -2,6 +2,7 @@ import { GpuCoreFactory } from '../../src/GpuCoreFactory';
 import { HypercubeConfig, EngineDescriptor } from '../../src/types';
 import { HypercubeGPUContext } from '../../src/gpu/HypercubeGPUContext';
 import LbmCoreSource from '../../src/kernels/wgsl/LbmCore.wgsl?raw';
+import ReductionCoreSource from '../../src/kernels/wgsl/ReductionCore.wgsl?raw';
 
 const logEl = document.getElementById('log')!;
 function print(msg: string) { logEl.innerText += msg + '\n'; }
@@ -15,17 +16,6 @@ function initializeRandomDensity(N: number): Float32Array {
         }
     }
     return rhoData;
-}
-
-function sumTotalMass(rhoData: Float32Array, N: number): number {
-    let total = 0.0;
-    // We only sum active cells, excluding halo boundaries to avoid duplication
-    for (let y = 1; y <= N; y++) {
-        for (let x = 1; x <= N; x++) {
-            total += rhoData[y * (N+2) + x];
-        }
-    }
-    return total;
 }
 
 async function runConservationAudit() {
@@ -65,18 +55,13 @@ async function runConservationAudit() {
 
         const engine = await factory.build(config, lbmDescriptor);
 
-        // TICK 0 auto-init bypass
-        engine.use({ lbm: LbmCoreSource });
-        await engine.step(1); 
-        await device.queue.onSubmittedWorkDone();
-
+        // --- 1. GPU INITIALIZATION ---
         const initialRho = initializeRandomDensity(N);
-        const initialMass = sumTotalMass(initialRho, N);
-        print(`Grid Size: ${N}x${N} (${N*N} computational nodes)`);
-        print(`Initial Mass M(t=0) = ${initialMass.toFixed(6)} kg`);
-
-        // Enclose domain in an impermeable bounce-back border to prevent NaN leakage 
-        // through uninitialized ghost cells.
+        
+        // Auto init bypass & Kernel Registration
+        await engine.use({ lbm: LbmCoreSource });
+        
+        // Enclose domain in an impermeable bounce-back border (User Preference)
         const borderData = new Float32Array((N+2)*(N+2));
         for (let y = 1; y <= N; y++) {
             for (let x = 1; x <= N; x++) {
@@ -86,15 +71,11 @@ async function runConservationAudit() {
             }
         }
         engine.setFaceData('chunk_0_0_0', 'obstacle', borderData, true);
-
         engine.setFaceData('chunk_0_0_0', 'rho', initialRho, true);
         
         // Match populations to initial rho (rest density initialization)
         const w = [4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36];
-        const strideFace = (engine.buffer as any).strideFace;
-        
-        // IMPORTANT: fData passes exactly the number of components for ONE slot (9 for populations)
-        // engine.setFaceData will duplicate it to the back-buffer if isPingPong=true and fillAll=true.
+        const strideFace = engine.buffer.layout.strideFace;
         const fData = new Float32Array(strideFace * 9);
         for(let idx = 0; idx < initialRho.length; idx++) {
             const rho = initialRho[idx];
@@ -102,36 +83,39 @@ async function runConservationAudit() {
                 fData[d * strideFace + idx] = rho * w[d];
             }
         }
+        // Use fillAllPingPong=true to sync both buffers at T=0
         engine.setFaceData('chunk_0_0_0', 'f', fData, true);
-
-        // FATAL MISSED STEP: Copy JS CPU TypedArrays -> WebGPU Hardware Buffer!
         engine.syncToDevice();
 
+        // CRITICAL: Step 0 Auto-Init Calibration
+        await engine.step(1); 
+        await device.queue.onSubmittedWorkDone();
+
+        // --- 2. INITIAL MEASUREMENT (GPU-SIDE) ---
+        const m0 = await engine.reduceField('rho', ReductionCoreSource);
+        print(`Grid Size: ${N}x${N} (${N*N} computational nodes)`);
+        print(`Initial Mass M(t=0) GPU = ${m0.toFixed(6)} kg`);
+
+        // --- 3. SIMULATION ---
         print(`Simulating ${steps} discrete WGSL dispatches...`);
         await engine.step(steps);
         await device.queue.onSubmittedWorkDone();
 
-        // --- DIAGNOSTICS ---
-        const mb = engine.buffer as any;
-        print(`RawBuffer size: ${mb.rawBuffer.byteLength}`);
-        print(`Total Slots: ${mb.layout.totalSlotsPerChunk}`);
-        print(`StrideFace (floats): ${mb.layout.strideFace}`);
+        // --- 4. FINAL MEASUREMENT (GPU-SIDE) ---
+        const m1 = await engine.reduceField('rho', ReductionCoreSource);
+        print(`Final Mass M(t=${steps}) GPU = ${m1.toFixed(6)} kg`);
         
-        // Run sync and get final mass
-        await engine.syncFacesToHost(['rho']);
-        const finalRho = engine.getFaceData('chunk_0_0_0', 'rho');
-        const finalMass = sumTotalMass(finalRho, N);
-        print(`Final Mass M(t=${steps}) = ${finalMass.toFixed(6)} kg`);
-        
-        const diff = Math.abs(finalMass - initialMass);
-        const relativeError = diff / initialMass;
-        print(`Drift Delta: ${diff.toExponential(4)}`);
+        const drift = Math.abs(m1 - m0);
+        const relativeError = drift / (m0 + 1e-12);
+        print(`Drift Delta: ${drift.toExponential(4)}`);
         print(`Relative Deviation: ${(relativeError * 100).toExponential(4)} %`);
 
-        if (relativeError < 1e-3) {
-            print("\nRESULT: SUCCESS! Strict mass conservation proven to FP32 limits (relative drift < 0.1%).");
+        if (relativeError < 1e-7) {
+            print("\nRESULT: SUCCESS! Strict mass conservation proven (Zero-Drift Certified).");
+        } else if (relativeError < 1e-3) {
+            print("\nRESULT: PASS! Mass conservation within FP32 limits.");
         } else {
-            print("\nRESULT: FAILED. Mass is leaking from the periodic domain.");
+            print("\nRESULT: FAILED. Mass leakage detected.");
         }
 
     } catch (e: any) {

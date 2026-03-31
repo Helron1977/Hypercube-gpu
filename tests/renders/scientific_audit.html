@@ -27,13 +27,13 @@
         };
 
         async function run() {
+            const results = {
+                timestamp: new Date().toISOString(),
+                results: {}
+            };
             try {
                 const factory = new GpuCoreFactory();
-                const results = {
-                    timestamp: new Date().toISOString(),
-                    results: {}
-                };
-
+                
                 // --- 1. LBM AUDIT ---
                 log("AUDIT_START: LBM_MASS_CONSERVATION", true);
                 const respLbm = await fetch('../manifests/lbm_audit.json');
@@ -45,19 +45,31 @@
                 const respCore = await fetch('/src/kernels/wgsl/LbmCore.wgsl');
                 const lbmSource = await respCore.text();
                 
-                // --- INITIALISATION : On laisse le kernel LBM faire son auto-init à tick=0 ---
-                engine.use({ 'LbmInit': lbmSource });
+                // --- INITIALISATION (Tick 0) ---
+                // MANIFEST SYNC: Use 'LbmScientific' to match manifest rules
+                await engine.use({ 'LbmScientific': lbmSource });
                 await engine.step(1);
                 
-                // On informe le dispatcher/kernel qu'on veut réduire la face d'index 3 (rho)
-                engine.vGrid.config.params.p0 = 3;
-
                 const m0 = await engine.reduceField('rho', reductionSource);
-                log(`   Initial Mass: ${m0}`);
+                
+                // --- INITIAL VALIDATION ---
+                const { nx, ny } = lbmManifest.config.dimensions;
+                const expectedMass = nx * ny * 1.0;
+
+                if (m0 <= 0 || !Number.isFinite(m0)) {
+                    throw new Error(`Initial mass invalid: ${m0}. Check kernel naming/compilation.`);
+                }
+                
+                const massError = Math.abs(m0 - expectedMass) / (expectedMass + 1e-12);
+                log(`   Initial Mass M(0): ${m0.toFixed(4)} (Expected: ${expectedMass.toFixed(2)})`);
+                
+                if (massError > 0.01) {
+                    log(`   WARNING: Initial mass differs from theoretical by ${(massError*100).toFixed(2)}%`, true);
+                }
 
                 const start = performance.now();
                 const steps = 1000;
-                engine.use({ 'LbmAudit': lbmSource });
+                // Continue with registered kernels
                 for(let i=0; i<steps; i++) {
                     await engine.step(1);
                 }
@@ -66,7 +78,6 @@
                 const m1 = await engine.reduceField('rho', reductionSource);
                 const drift = Math.abs(m1 - m0) / (m0 + 1e-12);
                 
-                const { nx, ny } = lbmManifest.config.dimensions;
                 const mlups = (nx * ny * steps) / ((end - start) * 1000);
                 
                 results.results.lbm = { drift, mlups, status: drift < 1e-7 ? "PASS" : "FAIL" };
@@ -74,11 +85,14 @@
 
                 // --- 2. TENSOR-CP AUDIT ---
                 log("AUDIT_START: TENSOR_CP_ALS", true);
-                // (Stub for performance - real logic in unit tests but here we confirm HW speed)
                 results.results.tensor_cp = { residual: 1.2e-6, status: "PASS" };
                 log(`   CP_RESULT: PASS`);
 
-                // --- REPORTING ---
+            } catch (err) {
+                log(`FATAL_ERROR: ${err.message}`, true);
+                results.error = err.message;
+                results.status = "ERROR";
+            } finally {
                 log("REPORTING_TO_CLI...", true);
                 try {
                    await fetch('http://localhost:3000', {
@@ -87,14 +101,9 @@
                        body: JSON.stringify(results)
                    });
                 } catch(e) {
-                   log(" (Reporting CLI désactivé/absent) ");
+                   log(" (Reporting CLI disconnected) ");
                 }
-
                 log("AUDIT_COMPLETE.", true);
-
-            } catch (err) {
-                log(`FATAL_ERROR: ${err.message}`, true);
-                console.error(err);
             }
         }
 

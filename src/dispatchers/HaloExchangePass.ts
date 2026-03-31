@@ -27,6 +27,8 @@ export class HaloExchangePass {
 
         const metadata = await pipelineCache.getPipeline(device, 'HaloExchange', source, getWgslHeader);
         const pipeline = metadata.pipeline;
+        
+        // Zero-Stall Pre-check: Only update if anything changed
         const transfers: any[] = [];
         const stride = buffer.strideFace;
         const numFaces = vGrid.dataContract.getFaceMappings().length;
@@ -112,7 +114,8 @@ export class HaloExchangePass {
             const globals = vGrid.dataContract.getGlobalMappings();
             if (globals.length > 0) {
                 const hasAtomic = globals.some(g => g.type.startsWith('atomic'));
-                const sourceBuffer = hasAtomic ? buffer.gpuAtomicBuffer : buffer.gpuBuffer;
+                const sourceBuffer = (hasAtomic ? buffer.gpuAtomicBuffer : buffer.gpuBuffer) as GPUBuffer;
+                if (!sourceBuffer) return; // Should not happen in production
                 const firstGlobalName = globals[0].name;
                 const globalOffset = buffer.layout.getGlobalOffset(firstGlobalName) * 4;
                 const globalSize = vGrid.dataContract.calculateGlobalBytes();

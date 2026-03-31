@@ -71,7 +71,7 @@
             lx = engine.buffer.layout.strideRow;
             L('[3/3] Loading fractal kernel...');
             wgsl = await (await fetch('/src/kernels/wgsl/MandelbulbCore.wgsl')).text();
-            engine.use({ 'MandelbulbCore': wgsl });
+            engine.use({ 'Mandelbulb3DCore': wgsl });
             running = true; lt = performance.now();
             L('✓ Volume rendering');
             requestAnimationFrame(tick);

@@ -37,5 +37,5 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         ) + c;
     }
 
-    write_fractal(px, py, pz, f32(iterations) / f32(maxIter));
+    write_fractal_Now(px, py, pz, f32(iterations) / f32(maxIter));
 }

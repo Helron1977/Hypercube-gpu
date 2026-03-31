@@ -13,12 +13,12 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     for (var j = -1i; j <= 1i; j++) {
         for (var i = -1i; i <= 1i; i++) {
             if (i == 0i && j == 0i) { continue; }
-            let val = read_s(u32(i32(px) + i), u32(i32(py) + j));
+            let val = read_s_Now(u32(i32(px) + i), u32(i32(py) + j));
             if (val > 0.5) { neighbors++; }
         }
     }
 
-    let state = read_s(px, py);
+    let state = read_s_Now(px, py);
     var nextState = 0.0;
 
     if (state > 0.5) {
@@ -27,5 +27,5 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         if (neighbors == 3u) { nextState = 1.0; }
     }
 
-    write_s(px, py, nextState);
+    write_s_Next(px, py, nextState);
 }

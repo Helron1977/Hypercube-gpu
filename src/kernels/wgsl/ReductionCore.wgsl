@@ -7,8 +7,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     
     let i = getIndex(id.x, id.y);
     
-    // Sum from Face defined by parameter p0
-    let faceIdx = u32(uniforms.p0);
-    let val = data[uniforms.faces[faceIdx] * uniforms.strideFace + i];
+    // Sum from Face Slot defined by p0 (Direct Slot Pointer)
+    let slotIdx = u32(uniforms.p0);
+    let val = data[slotIdx * uniforms.strideFace + i];
     atomicAdd(&results[0], i32(val * uniforms.p7));
 }

@@ -19,6 +19,8 @@ export class GpuDispatcher {
     private haloExchange: HaloExchangePass = new HaloExchangePass();
     private reductionPass: ReductionPass = new ReductionPass();
     private bindGroupCache: Map<string, GPUBindGroup> = new Map();
+    private activeMetadata: (PipelineMetadata | null)[] = [];
+    private needsGlobalClear: boolean = false;
 
     constructor(
         private vGrid: IVirtualGrid,
@@ -43,11 +45,31 @@ export class GpuDispatcher {
         return this.stagingManager.stagingBuffer || null;
     }
 
+    public invalidateActiveMetadata(): void {
+        this.activeMetadata = [];
+        this.bindGroupCache.clear();
+    }
+
+    public precomputeDispatchFlags(): void {
+        const globals = this.vGrid.dataContract.getGlobalMappings();
+        this.needsGlobalClear = globals.length > 0 && globals.some(g => g.type.startsWith('atomic'));
+    }
+
     public async prepareKernels(kernels: Record<string, string>): Promise<void> {
-        const promises = Object.entries(kernels).map(([type, source]) =>
-            this.getPipeline(type, source)
-        );
-        await Promise.all(promises);
+        const descriptor = this.vGrid.dataContract.descriptor;
+        const rules = descriptor.rules || [];
+        
+        // 1. Resolve core pipelines
+        const promises = rules.map((scheme: any) => {
+            const source = kernels[scheme.type];
+            return source ? this.getPipeline(scheme.type, source) : Promise.resolve(null);
+        });
+        this.activeMetadata = await Promise.all(promises);
+
+        // 2. Resolve HaloExchange if applicable
+        if (this.vGrid.chunks.length > 1 && kernels['HaloExchange']) {
+            await this.getPipeline('HaloExchange', kernels['HaloExchange']);
+        }
     }
 
     public async getPipeline(type: string, source: string): Promise<PipelineMetadata> {
@@ -67,20 +89,20 @@ export class GpuDispatcher {
         const rules = descriptor.rules || [];
         const faceMappings = this.vGrid.dataContract.getFaceMappings();
 
-        // 1. Prepare Pipelines (Returns Metadata objects with pre-calculated flags)
-        const pipelinePromises = rules.map((scheme: any) => {
-            const source = kernels[scheme.type];
-            return source ? this.pipelineCache.getPipeline(this.device, scheme.type, source, (t: string, s: string) => this.getWgslHeader(t, s)) : Promise.resolve(null);
-        });
-        const activeMetadata = await Promise.all(pipelinePromises);
+        // 1. Prepare Pipelines (Zero-Stall: Use pre-computed metadata or fallback for transient kernels)
+        let activeMetadata = this.activeMetadata;
+        if (activeMetadata.length === 0 || kernels !== (this as any)._lastKernels) {
+             const pipelinePromises = rules.map((scheme: any) => {
+                const source = kernels[scheme.type];
+                return source ? this.pipelineCache.getPipeline(this.device, scheme.type, source, (t: string, s: string) => this.getWgslHeader(t, s)) : Promise.resolve(null);
+            });
+            activeMetadata = await Promise.all(pipelinePromises);
+            (this as any)._lastKernels = kernels; 
+        }
 
-        // 2. Clear Global Workspace (if atomic globals exist)
-        const globals = this.vGrid.dataContract.getGlobalMappings();
-        if (globals.length > 0 && globals.some(g => g.type.startsWith('atomic'))) {
-            if (this.buffer.gpuGlobalBuffer) {
-                // v9 SOTA: Zero-CPU-Stall buffer clearing
-                commandEncoder.clearBuffer(this.buffer.gpuGlobalBuffer);
-            }
+        // 2. Clear Global Workspace (Zero-Stall: Use pre-computed flag)
+        if (this.needsGlobalClear && this.buffer.gpuGlobalBuffer) {
+            commandEncoder.clearBuffer(this.buffer.gpuGlobalBuffer);
         }
 
         // 3. Update Uniform Staging

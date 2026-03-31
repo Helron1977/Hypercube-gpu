@@ -60,7 +60,7 @@
             L('[3/4] Random seeding (30% density)...');
             const s0 = new Float32Array(cells);
             for (let i = 0; i < cells; i++) s0[i] = Math.random() < 0.3 ? 1.0 : 0.0;
-            engine.setFaceData('chunk_0_0_0', 's', s0, true);
+            engine.setFaceData('chunk_0_0_0', 's', s0);
             engine.syncToDevice();
 
             L('[4/4] Loading kernel...');
