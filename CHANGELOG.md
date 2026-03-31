@@ -1,3 +1,10 @@
+## [6.0.4] - 2026-03-31
+
+### Fixed
+- **WebGPU Binding Stability** : Migrated `Uniforms` from `uniform` to `storage, read` binding to resolve strict `std140` alignment constraints and restore canonical `uniforms.faces[X]` syntax in all kernels.
+- **Validation Suite Hardening** : Updated the autonomous test runner to listen on `127.0.0.1:3000` and increased timeout to 120s to ensure high-density LBM benchmarks complete successfully.
+- **Binding Size Mismatch** : Synchronized allocation and binding sizes for Atomics and Globals to 16-byte minimums, resolving `GPUPipelineError` validation failures.
+
 ## [6.0.3] - 2026-03-31
 
 ### Fixed

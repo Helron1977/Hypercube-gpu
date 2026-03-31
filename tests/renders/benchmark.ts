@@ -201,7 +201,7 @@ async function runBenchmark() {
 
         // Report to Autonomous Runner
         try {
-            await fetch('http://localhost:3000', {
+            await fetch('http://127.0.0.1:3000', {
                 method: 'POST',
                 headers: { 'X-Test-Name': 'perf-test' },
                 body: logEl.innerText
@@ -214,7 +214,7 @@ async function runBenchmark() {
         log('Error: ' + e.message);
         statusEl.innerText = 'FAILED';
         try {
-            await fetch('http://localhost:3000', { method: 'POST', headers: { 'X-Test-Name': 'perf-test' }, body: logEl.innerText + '\n\nBENCHMARK FAILED\n' + e.message });
+            await fetch('http://127.0.0.1:3000', { method: 'POST', headers: { 'X-Test-Name': 'perf-test' }, body: logEl.innerText + '\n\nBENCHMARK FAILED\n' + e.message });
         } catch (err) { }
     }
 }

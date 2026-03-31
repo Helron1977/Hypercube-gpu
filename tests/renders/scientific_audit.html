@@ -95,7 +95,7 @@
             } finally {
                 log("REPORTING_TO_CLI...", true);
                 try {
-                   await fetch('http://localhost:3000', {
+                   await fetch('http://127.0.0.1:3000', {
                        method: 'POST',
                        headers: { 'Content-Type': 'application/json', 'x-test-name': 'scientific-audit' },
                        body: JSON.stringify(results)

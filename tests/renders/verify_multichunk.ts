@@ -132,7 +132,7 @@ async function runMultiChunkValidation() {
         mlups: (nx * ny * nz * 1000) / ((t1 - t0) * 1000)
     };
     
-    fetch('http://localhost:3000', {
+    fetch('http://127.0.0.1:3000', {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',

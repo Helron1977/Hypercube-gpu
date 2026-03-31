@@ -42,7 +42,7 @@
 
                 // Final Report to Autonomous Runner (port 3000)
                 try {
-                    await fetch('http://localhost:3000', {
+                    await fetch('http://127.0.0.1:3000', {
                         method: 'POST',
                         headers: { 'X-Test-Name': 'conservation-audit' },
                         body: document.getElementById('log').innerText
@@ -54,7 +54,7 @@
                 console.error("Audit Runtime Error:", e);
                 document.getElementById('status').innerText = 'AUDIT FAILED';
                 try {
-                    await fetch('http://localhost:3000', {
+                    await fetch('http://127.0.0.1:3000', {
                         method: 'POST',
                         headers: { 'X-Test-Name': 'conservation-audit' },
                         body: document.getElementById('log').innerText + '\n\nAUDIT FAILED: ' + e.message

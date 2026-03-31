@@ -158,7 +158,7 @@ async function runAll() {
         print(`\nError: ${e.message}`);
     } finally {
         try {
-            await fetch('http://localhost:3000', {
+            await fetch('http://127.0.0.1:3000', {
                 method: 'POST',
                 headers: { 'X-Test-Name': 'grid_refinement' },
                 body: logEl.innerText
