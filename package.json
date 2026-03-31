@@ -7,6 +7,8 @@
   "types": "./dist/src/index.d.ts",
   "files": [
     "dist",
+    "agents",
+    "docs",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"

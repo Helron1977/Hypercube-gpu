@@ -46,6 +46,10 @@ const thermalEngine = await linkSimulation(heatManifest, shared);
 | **Electromagnetics** | [FDTD Maxwell](./docs/electromagnetics-fdtd/README.md) | **v6.0 CERTIFIED** |
 | **Potential Fields** | [Poisson Solver](./docs/numerical-physics/README.md) | **v6.0 CERTIFIED** |
 | **Signal Physics** | [Wave Equation](./docs/numerical-physics/README.md) | **v6.0 CERTIFIED** |
+| **AI Agents** | [Agent Guidelines](./agents/README.md) | **ACTIVE** |
+
+## 🤖 AI Collaborator Support
+AI agents developing with Hypercube should initialize by reading `agents/README.md` and parsing `docs/index.html` for technical specifications of the **Manifest DSL** and **WGSL Macro** system.
 
 ## License
 MIT — Hypercube GPU Core v6.0.1 (Helron/Hypercube)
