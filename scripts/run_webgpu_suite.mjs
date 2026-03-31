@@ -82,13 +82,13 @@ async function runNextTest() {
     const test = tests[currentTestIndex];
     console.log(`\n▶️ [${currentTestIndex + 1}/${tests.length}] Executing ${test.name} -> ${test.url}`);
     
-    // Anticiper les échecs: si le test est silencieux pendant 35 secondes, on passe au suivant.
+    // Anticiper les échecs: si le test est silencieux pendant 120 secondes, on passe au suivant.
     global.currentTestTimeout = setTimeout(() => {
-        console.log(`\x1b[31m❌ TIMEOUT FATAL: Le test n'a pas répondu après 35s. (Erreur de compilation probable)\x1b[0m`);
+        console.log(`\x1b[31m❌ TIMEOUT FATAL: Le test n'a pas répondu après 120s. (Simulation trop lourde ou crash)\x1b[0m`);
         console.log(`⏩ Passage forcé au test suivant...`);
         currentTestIndex++;
         runNextTest();
-    }, 35000);
+    }, 120000);
 
     // Launch browser
     const startCmd = process.platform === 'win32' ? 'start' : (process.platform === 'darwin' ? 'open' : 'xdg-open');
@@ -96,13 +96,22 @@ async function runNextTest() {
 }
 
 const server = http.createServer((req, res) => {
+    // 1. Audit Log des requêtes entrantes
+    console.log(`\x1b[90m[REQ] ${req.method} ${req.url} from ${req.socket.remoteAddress}\x1b[0m`);
+
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST');
+    res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST, GET');
     res.setHeader('Access-Control-Allow-Headers', '*');
 
     if (req.method === 'OPTIONS') {
         res.writeHead(200);
         res.end();
+        return;
+    }
+
+    if (req.method === 'GET' && req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('Hypercube Validation Runner is UP and Listening.');
         return;
     }
 
@@ -113,7 +122,7 @@ const server = http.createServer((req, res) => {
         const expectedTest = tests[currentTestIndex];
 
         if (!expectedTest || testId !== expectedTest.id) {
-            console.log(`\x1b[33m⚠️ Ignoring background noise payload from: ${testId}\x1b[0m`);
+            console.log(`\x1b[33m⚠️ Ignoring payload from: ${testId} (Currently expecting: ${expectedTest?.id})\x1b[0m`);
             res.writeHead(200);
             res.end('OK');
             return;
@@ -122,7 +131,6 @@ const server = http.createServer((req, res) => {
         clearTimeout(global.currentTestTimeout);
 
         console.log(`\n⬇️  [RESULT RECEIVED] Mapped Payload: ${testId}\n`);
-        console.log(body);
         
         // Write to reports directory
         const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
@@ -143,7 +151,8 @@ const server = http.createServer((req, res) => {
 });
 
 console.log("🚀 Starting Hypercube Autonomous WebGPU Test Suite Runner...");
-server.listen(3000, () => {
+server.listen(3000, '127.0.0.1', () => {
+    console.log("📡 Server listening on http://127.0.0.1:3000");
     runNextTest();
 }).on('error', (e) => {
     if (e.code === 'EADDRINUSE') {

@@ -63,7 +63,7 @@ export class MasterBuffer implements IMasterBuffer {
                 this.gpuAtomicBuffer = sharedGpuAtomicBuffer;
             } else {
                 this.gpuAtomicBuffer = this.device.createBuffer({
-                    size: Math.ceil(this.layout.atomicByteLength / 4) * 4,
+                    size: Math.max(Math.ceil(this.layout.atomicByteLength / 4) * 4, 16),
                     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
                     label: 'Hypercube Atomic Buffer (U32)'
                 });

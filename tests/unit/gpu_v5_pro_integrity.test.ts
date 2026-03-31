@@ -62,7 +62,7 @@ describe('Hypercube v6.0 Pro: WGSL Integrity Contract', () => {
         const { code: header } = dispatcher.getWgslHeader('LBM');
 
         // LOCK-IN: Standard Hypercube Uniform Binding
-        expect(header).toContain('@group(0) @binding(1) var<uniform> uniforms: Uniforms;');
+        expect(header).toContain('@group(0) @binding(1) var<storage, read> uniforms: Uniforms;');
     });
 
     it('CONTRACT: Uniforms struct must preserve specific member layout', () => {
@@ -131,7 +131,7 @@ describe('Hypercube v6.0 Pro: WGSL Integrity Contract', () => {
 
         // Verify header injection
         expect(combinedSource).toContain('struct Uniforms');
-        expect(combinedSource).toContain('@group(0) @binding(1) var<uniform> uniforms: Uniforms;');
+        expect(combinedSource).toContain('@group(0) @binding(1) var<storage, read> uniforms: Uniforms;');
         expect(combinedSource).toContain(kernelSource);
 
         spy.mockRestore();

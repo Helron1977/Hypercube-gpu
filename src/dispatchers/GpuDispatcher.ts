@@ -190,7 +190,7 @@ export class GpuDispatcher {
                 resource: { 
                     buffer: this.buffer.gpuAtomicBuffer, 
                     offset: this.buffer.atomicOffset, 
-                    size: Math.ceil(this.buffer.layout.atomicByteLength / 256) * 256 
+                    size: Math.max(this.buffer.layout.atomicByteLength, 16) 
                 } 
             });
         }
@@ -203,7 +203,7 @@ export class GpuDispatcher {
                     resource: { 
                         buffer: this.buffer.gpuGlobalBuffer, 
                         offset: this.buffer.globalOffset, 
-                        size: Math.max(Math.ceil(globalSize / 256) * 256, 16) 
+                        size: Math.max(globalSize, 16) 
                     }
                 });
             }

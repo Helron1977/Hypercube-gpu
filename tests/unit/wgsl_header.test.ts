@@ -14,7 +14,7 @@ describe('WgslHeaderGenerator: Universal Macro System (v6)', () => {
 
         // 1. Technical Infrastructure (Bindings)
         expect(header).toContain('@group(0) @binding(0) var<storage, read_write> data: array<f32>;');
-        expect(header).toContain('@group(0) @binding(1) var<uniform> uniforms: Uniforms;');
+        expect(header).toContain('@group(0) @binding(1) var<storage, read> uniforms: Uniforms;');
 
         // 2. Structural Source of Truth (Struct Uniforms)
         expect(header).toContain('struct Uniforms {');

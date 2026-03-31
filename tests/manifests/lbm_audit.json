@@ -5,10 +5,10 @@
     "dimensions": { "nx": 512, "ny": 256, "nz": 1 },
     "chunks": { "x": 1, "y": 1 },
     "boundaries": {
-      "left": { "role": "periodic" },
-      "right": { "role": "periodic" },
-      "top": { "role": "periodic" },
-      "bottom": { "role": "periodic" }
+      "left": { "role": "inflow" },
+      "right": { "role": "outflow" },
+      "top": { "role": "wall" },
+      "bottom": { "role": "wall" }
     },
     "engine": "LbmScientific",
     "params": {

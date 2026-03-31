@@ -51,7 +51,7 @@ export class WgslHeaderGenerator {
 
         // 1. CANONICAL RESOURCE BINDINGS
         let h = `@group(0) @binding(0) var<storage, read_write> data: array<f32>;\n`;
-        h += `@group(0) @binding(1) var<uniform> uniforms: Uniforms;\n`;
+        h += `@group(0) @binding(1) var<storage, read> uniforms: Uniforms;\n`;
         
         // --- FIELD ATOMICS (@binding 2) ---
         // Only inject if the kernel actually wants atomics AND we have atomic fields
