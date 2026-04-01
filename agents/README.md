@@ -1,46 +1,16 @@
-# Hypercube GPU Core: Agent Onboarding Guideline
-*Instructions for AI Agents consuming or developing with the Hypercube GPU Core.*
+# Hypercube Agent Onboarding Guide
 
-## 1. Documentation Source of Truth (docs/index.html)
-The `docs/index.html` file serves as the centralized **Developer Experience (DX) Hub**.
-- **Mandatory Action**: Agents MUST read/parse `docs/index.html` to understand the full architectural details, Manifest DSL, and the WGSL Header injection system.
-- **Visual Auditing**: Because Hypercube relies on hardware-backed WebGPU renders, agents MUST ask the Human User to verify the dashboard and browser console outputs for any visual regressions or shader validation errors.
+Ce dépôt utilise une architecture tripartite (Données/Logique/Topologie). Pour tout développement de kernel ou modification du Core, suivez impérativement cet ordre de lecture pour garantir l'intégrité scientifique du simulateur.
 
-## 2. High-Level Language (Manifest DSL)
-Hypercube simulations are defined declaratively via a `SimulationManifest`.
-- **Faces**: Discrete data layers in VRAM (Standard, Population, Mask, Atomic). Memory layout is deterministic and handled by the `DataContract`.
-- **Rules**: Sequence of compute kernels executed per simulation tick. All kernels use a shared physical `GPUBuffer`.
-- **Globals**: Simulation-wide shared variables (e.g., $C_D$, $C_L$, Energy totals) stored in a dedicated `gpuGlobalBuffer`.
-
-## 3. The Automated Macro System
-Hypercube injects an automated header into every WGSL kernel. **DO NOT** use raw buffer offsets.
-- **Reading Data**: 
-  - `read_FACENAME_Now(x, y)` for scalars/masks.
-  - `read_FACENAME_Now(x, y, component)` for multi-scalar populations.
-- **Writing Data**:
-  - `write_FACENAME_Next(x, y, value)` (if `pingPong: true`).
-  - `write_FACENAME_Now(x, y, value)` (if `pingPong: false`).
-- **Atomic Operations**:
-  - `atomicAdd_FACENAME_Now(x, y, value)`.
-  - `atomicAdd_global_GLOBNAME(index, value)`.
-
-## 4. Operation Lifecycle
-1. **Instantiation**: `createSimulation(manifest)` validates the contract and allocates the `MasterBuffer`.
-2. **Registration**: `engine.use({ ruleName: wgslSource })` pre-compiles GPU pipelines.
-3. **Execution**: `engine.step(n)` invokes the `GpuDispatcher` for $n$ iterations with zero host-to-device communication overhead.
-4. **Data Retrieval**: `engine.getFace('name')` or `engine.getGlobal('name')` for asynchronous, host-shadow-free results.
-
-## 5. Topology & Scale Management
-Simulation size is determined by two synchronized parameters:
-- **`dimensions`**: The logical size of the grid (`nx`, `ny`, `nz`).
-- **`chunks`**: Physical partitioning of the grid. If `chunks.x > 1`, the grid is split into multiple independent areas for better scaling and multi-GPU compatibility.
-- **Rule**: `nx` must be a multiple of `chunks.x`, and so on.
-
-## 6. Multi-Engine & Side-by-Side Simulations
-To have multiple simulations sharing memory (Coupled Physics):
-1. **`SharedMasterBuffer`**: Allocate a single, large VRAM block.
-2. **`linkSimulation(manifest, shared)`**: Link multiple engines to the same physical buffer. Each engine gets a unique `offset` but shares the same memory space.
-3. **`MultiPhysicsHub`**: Use the hub to merge multiple `EngineDescriptors` (faces, rules, globals) into a single unified simulation if tight coupling (e.g., fluid/thermal) is required.
+## Ordre de Lecture Mandataire
+1.  **[Kernel Implementation Guide](file:///docs/guides/kernel-implementation.md)**  
+    *Objectif : Comprendre le flux du problème physique vers le GPU (Manifeste, Header Engine, Ping-Pong).*
+2.  **[API Reference (DX Hub)](file:///docs/index.html)**  
+    *Objectif : Référence complète des types de faces, macros WGSL et méthodes d'orchestration v6.0.6.*
+3.  **[Exemple Certifié (LBM Core)](file:///src/kernels/wgsl/LbmCore.wgsl)**  
+    *Objectif : Étude d'un noyau de production utilisant le stencil D2Q9 et l'aliasing sémantique.*
+4.  **[Pattern d'Usage Complet](file:///tests/renders/conservation.ts)**  
+    *Objectif : Voir comment le moteur est instancié et audité pour la conservation de masse/énergie.*
 
 ---
-*Scientific Protocol: Rigor & Absolute Clarity*
+*Note : Aucune modification du Core (MasterBuffer, GpuDispatcher) ne doit être tentée sans lecture préalable de ces quatre piliers.*
