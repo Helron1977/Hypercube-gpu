@@ -1,3 +1,14 @@
+## [6.0.5] - 2026-03-31
+
+### Added
+- **Transient Execution API** : Introduction of `GpuEngine.executeTransient()` for one-shot dispatches that do not advance the parity clock.
+- **Active Data Injection** : New `GpuEngine.injectData()` helper for mid-simulation interaction targeting the active parity read-slot.
+- **Semantic Parameter Aliasing** : The WGSL header generator now automatically creates aliases for `p0...p7` (e.g., `let viscosity = uniforms.p0`) based on the parameter keys defined in the manifest.
+- **Custom EntryPoints** : Support for non-standard compute entry points via the `entryPoint` property in `NumericalScheme`. No longer hardcoded to `main`.
+
+### Fixed
+- **Construction Guard** : Added a safety check in `GpuEngine` to prevent manual construction before `HypercubeGPUContext` initialization.
+
 ## [6.0.4] - 2026-03-31
 
 ### Fixed

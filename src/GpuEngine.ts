@@ -22,6 +22,10 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
         public readonly dispatcher: GpuDispatcher,
         public readonly parityManager: ParityManager
     ) {
+        if (!HypercubeGPUContext.isInitialized) {
+            throw new Error("[GpuEngine] GPU Context was not correctly initialized. Use GpuCoreFactory to create engine instances.");
+        }
+
         // Fluent & Proxy Params Controller
         this.params = new Proxy(this.persistentOverrides, {
             get: (target, prop) => {
@@ -38,6 +42,29 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
                 return true;
             }
         }) as any;
+    }
+
+    /**
+     * Executes a one-shot transient kernel without advancing the parity clock.
+     * Perfect for impulses, conditional resets, or selective data injection.
+     */
+    public async executeTransient(type: string, source: string, overrides?: Partial<TParams>, entryPoint: string = 'main'): Promise<void> {
+        const header = this.dispatcher.getWgslHeader(type, source);
+        const combined = header.code + "\n" + source;
+        const mergedParams = { ...this.persistentOverrides, ...overrides } as TParams;
+        
+        await this.dispatcher.dispatchOneShot(combined, type, mergedParams, entryPoint);
+    }
+
+    /**
+     * Injects data directly into the current READ slot of a face.
+     * Unlike setFaceData, this is intended for mid-simulation interaction
+     * and correctly identifies the active parity slot before staging.
+     */
+    public injectData(faceName: string, data: Float32Array | number[], chunkId: string = 'chunk_0_0_0'): void {
+        const parity = this.parityManager.getFaceIndices(faceName).read;
+        this.buffer.setFaceData(chunkId, faceName, data, false, parity);
+        this.buffer.syncToDevice();
     }
 
     /**

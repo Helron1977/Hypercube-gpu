@@ -93,7 +93,6 @@ export class HypercubeGPUContext {
     }
 
     public static get isInitialized(): boolean {
-        if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') return true;
         return this._state.device !== null;
     }
 
@@ -144,19 +143,19 @@ export class HypercubeGPUContext {
         return Math.ceil(size / alignment) * alignment;
     }
 
-    static createComputePipeline(wgslSource: string, label = 'Compute Pipeline'): GPUComputePipeline {
+    static createComputePipeline(wgslSource: string, label = 'Compute Pipeline', entryPoint = 'main'): GPUComputePipeline {
         const shaderModule = this.device.createShaderModule({ code: wgslSource });
         return this.device.createComputePipeline({
             label, layout: 'auto',
-            compute: { module: shaderModule, entryPoint: 'main' }
+            compute: { module: shaderModule, entryPoint }
         });
     }
 
-    static async createComputePipelineAsync(wgslSource: string, label = 'Compute Pipeline'): Promise<GPUComputePipeline> {
+    static async createComputePipelineAsync(wgslSource: string, label = 'Compute Pipeline', entryPoint = 'main'): Promise<GPUComputePipeline> {
         const shaderModule = this.device.createShaderModule({ code: wgslSource });
         return await this.device.createComputePipelineAsync({
             label, layout: 'auto',
-            compute: { module: shaderModule, entryPoint: 'main' }
+            compute: { module: shaderModule, entryPoint }
         });
     }
 

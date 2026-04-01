@@ -45,7 +45,7 @@ export class ReductionPass {
         
         device.queue.writeBuffer(this.forceResultsBuffer, 0, new Int32Array(4).fill(0));
         
-        const metadata = await pipelineCache.getPipeline(device, 'Reduction', source, getWgslHeader);
+        const metadata = await pipelineCache.getPipeline(device, 'Reduction', source, getWgslHeader, 'main');
         const pipeline = metadata.pipeline;
         const encoder = device.createCommandEncoder();
         

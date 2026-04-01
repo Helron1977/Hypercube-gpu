@@ -24,7 +24,7 @@ export class UniformStagingManager {
     private dispatchMetadata: ChunkDispatchMetadata[] = [];
     private bytesPerChunkAligned: number = 0;
     private topologyResolver: TopologyResolver = new TopologyResolver();
-    private paramNames: string[] = [];
+    public paramNames: string[] = [];
 
     constructor(
         private vGrid: IVirtualGrid,

@@ -33,7 +33,7 @@ export class WgslHeaderGenerator {
         };
     }
 
-    public static getHeader(mode: string, faces: FaceMapping[], globals: GlobalMapping[] = [], kernelSource: string = ""): WgslHeaderResult {
+    public static getHeader(mode: string, faces: FaceMapping[], globals: GlobalMapping[] = [], kernelSource: string = "", paramNames: string[] = []): WgslHeaderResult {
         const safeFaces = Array.isArray(faces) ? faces : [];
         const safeGlobals = Array.isArray(globals) ? globals : [];
 
@@ -69,8 +69,26 @@ export class WgslHeaderGenerator {
         }
         h += `\n`;
 
-        // 2. CANONICAL UNIFORM STRUCTURE
         h += getUniformsStructWGSL() + `\n`;
+
+        // --- SEMANTIC PARAMETER MAPPING (v6.0.5 SOTA) ---
+        if (paramNames.length > 0) {
+            h += `struct SimulationParams {\n`;
+            paramNames.forEach((name, i) => {
+                if (i < 8 && name) h += `    ${name}: f32,\n`;
+            });
+            h += `};\n\n`;
+
+            h += `fn get_params() -> SimulationParams {\n`;
+            h += `    return SimulationParams(\n`;
+            const mappings = [];
+            for (let i = 0; i < Math.min(paramNames.length, 8); i++) {
+                if (paramNames[i]) mappings.push(`        uniforms.p${i}`);
+            }
+            h += mappings.join(',\n') + '\n';
+            h += `    );\n`;
+            h += `}\n\n`;
+        }
         
         h += `// Hypercube SOTA Header (v6.0: Binding 3 Enabled)\n\n`;
 

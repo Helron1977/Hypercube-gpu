@@ -24,7 +24,8 @@ export class PipelineCache {
         device: GPUDevice, 
         ruleType: string, 
         source: string, 
-        getWgslHeader: (type: string, source: string) => WgslHeaderResult
+        getWgslHeader: (type: string, source: string) => WgslHeaderResult,
+        entryPoint: string = 'main'
     ): Promise<PipelineMetadata> {
         // Context Loss / Device Change Protection
         if (this.currentDevice !== device) {
@@ -37,12 +38,12 @@ export class PipelineCache {
         
         // Robust Hashing (Fixes substring collision bug)
         const hash = this.computeHash(combinedSource);
-        const cacheKey = `${ruleType}_${hash}`;
+        const cacheKey = `${ruleType}_${hash}_${entryPoint}`;
 
         let cached = this.pipelines.get(cacheKey);
         if (cached) return cached;
 
-        const p = await HypercubeGPUContext.createComputePipelineAsync(combinedSource, `Kernel_${ruleType}`);
+        const p = await HypercubeGPUContext.createComputePipelineAsync(combinedSource, `Kernel_${ruleType}`, entryPoint);
         
         // PRE-CALCULATE METADATA (v6.0 Alpha Zero-Stall)
         // Now using the DEFINITIVE flags from the header generator

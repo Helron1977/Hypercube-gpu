@@ -68,6 +68,7 @@ export interface NumericalScheme {
     field?: string;
     params?: Record<string, number | string>;
     faces?: string[];
+    entryPoint?: string;
 }
 
 export interface EngineDescriptor<TFaces = any> {

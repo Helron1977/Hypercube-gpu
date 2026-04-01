@@ -25,7 +25,7 @@ export class HaloExchangePass {
         const source = kernels['HaloExchange'];
         if (!source) return;
 
-        const metadata = await pipelineCache.getPipeline(device, 'HaloExchange', source, getWgslHeader);
+        const metadata = await pipelineCache.getPipeline(device, 'HaloExchange', source, getWgslHeader, 'main');
         const pipeline = metadata.pipeline;
         
         // Zero-Stall Pre-check: Only update if anything changed

@@ -62,7 +62,7 @@ export class GpuDispatcher {
         // 1. Resolve core pipelines
         const promises = rules.map((scheme: any) => {
             const source = kernels[scheme.type];
-            return source ? this.getPipeline(scheme.type, source) : Promise.resolve(null);
+            return source ? this.getPipeline(scheme.type, source, scheme.entryPoint || 'main') : Promise.resolve(null);
         });
         this.activeMetadata = await Promise.all(promises);
 
@@ -72,8 +72,8 @@ export class GpuDispatcher {
         }
     }
 
-    public async getPipeline(type: string, source: string): Promise<PipelineMetadata> {
-        return this.pipelineCache.getPipeline(this.device, type, source, (t: string, s: string) => this.getWgslHeader(t, s));
+    public async getPipeline(type: string, source: string, entryPoint: string = 'main'): Promise<PipelineMetadata> {
+        return this.pipelineCache.getPipeline(this.device, type, source, (t: string, s: string) => this.getWgslHeader(t, s), entryPoint);
     }
 
     public async dispatch(
@@ -94,7 +94,7 @@ export class GpuDispatcher {
         if (activeMetadata.length === 0 || kernels !== (this as any)._lastKernels) {
              const pipelinePromises = rules.map((scheme: any) => {
                 const source = kernels[scheme.type];
-                return source ? this.pipelineCache.getPipeline(this.device, scheme.type, source, (t: string, s: string) => this.getWgslHeader(t, s)) : Promise.resolve(null);
+                return source ? this.pipelineCache.getPipeline(this.device, scheme.type, source, (t: string, s: string) => this.getWgslHeader(t, s), scheme.entryPoint || 'main') : Promise.resolve(null);
             });
             activeMetadata = await Promise.all(pipelinePromises);
             (this as any)._lastKernels = kernels; 
@@ -220,7 +220,46 @@ export class GpuDispatcher {
     public getWgslHeader(ruleType: string, source: string = ""): WgslHeaderResult {
         const faceMappings = this.vGrid.dataContract.getFaceMappings();
         const globalMappings = this.vGrid.dataContract.getGlobalMappings();
-        return WgslHeaderGenerator.getHeader(ruleType, faceMappings, globalMappings, source);
+        const paramNames = this.stagingManager.paramNames || [];
+        return WgslHeaderGenerator.getHeader(ruleType, faceMappings, globalMappings, source, paramNames);
+    }
+
+    public async dispatchOneShot(
+        combinedSource: string, 
+        kernelName: string, 
+        overrides?: Record<string, number>,
+        entryPoint: string = 'main'
+    ): Promise<void> {
+        const metaObj = await this.getPipeline(kernelName, combinedSource, entryPoint);
+        const commandEncoder = this.device.createCommandEncoder();
+
+        // One-shot dispatch uses the current staging values but can apply overrides
+        const faceMappings = this.vGrid.dataContract.getFaceMappings();
+        const rules = this.vGrid.dataContract.descriptor.rules || [];
+        this.stagingManager.updateStaging(0, rules, faceMappings, overrides);
+        this.device.queue.writeBuffer(this.stagingManager.uniformBuffer!, 0, this.stagingManager.stagingBuffer!.buffer);
+
+        const passEncoder = commandEncoder.beginComputePass();
+        passEncoder.setPipeline(metaObj.pipeline);
+
+        const stagingMetadata = this.stagingManager.getMetadata();
+        for (let i = 0; i < stagingMetadata.length; i++) {
+            const meta = stagingMetadata[i];
+            const bindGroup = this.getCachedBindGroup(
+                metaObj.pipeline, this.buffer.gpuBuffer, this.stagingManager.uniformBuffer!,
+                meta.globalIdx, meta.uniformOffset, meta.dataOffset, meta.dataSize,
+                metaObj.usesAtomics, metaObj.usesGlobals
+            );
+            passEncoder.setBindGroup(0, bindGroup);
+            const dim = meta.vChunk.localDimensions;
+            if (dim.nz && dim.nz > 1) {
+                passEncoder.dispatchWorkgroups(Math.ceil(dim.nx / 8), Math.ceil(dim.ny / 8), Math.ceil(dim.nz / 4));
+            } else {
+                passEncoder.dispatchWorkgroups(Math.ceil(dim.nx / 16), Math.ceil(dim.ny / 16), 1);
+            }
+        }
+        passEncoder.end();
+        this.device.queue.submit([commandEncoder.finish()]);
     }
 
     public async reduce(kernelName: string, source: string, faceName?: string, numResults: number = 1, precisionScale: number = 1e9): Promise<number[]> {
