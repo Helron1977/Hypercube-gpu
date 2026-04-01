@@ -153,6 +153,23 @@ export class HypercubeGPUContext {
 
     static async createComputePipelineAsync(wgslSource: string, label = 'Compute Pipeline', entryPoint = 'main'): Promise<GPUComputePipeline> {
         const shaderModule = this.device.createShaderModule({ code: wgslSource });
+        
+        // --- SOTA Diagnostic Hook: Reveal precise WGSL syntax errors ---
+        const compilationInfo = await shaderModule.getCompilationInfo();
+        if (compilationInfo.messages.some(m => m.type === 'error')) {
+            console.error(`[Shader Error] in "${label}":`);
+            const lines = wgslSource.split('\n');
+            compilationInfo.messages.forEach(m => {
+                if (m.type === 'error') {
+                    console.error(`  Line ${m.lineNum}: ${m.message}`);
+                    if (m.lineNum > 0 && m.lineNum <= lines.length) {
+                        console.error(`  > ${lines[m.lineNum - 1]}`);
+                    }
+                }
+            });
+            throw new Error(`[ShaderModule Error] Failed to compile "${label}". See console for details.`);
+        }
+
         return await this.device.createComputePipelineAsync({
             label, layout: 'auto',
             compute: { module: shaderModule, entryPoint }

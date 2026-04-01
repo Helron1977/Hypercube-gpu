@@ -171,6 +171,29 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
 ---
 
+## PITFALLS : Les Pièges de la Production (v6.0.6)
+Le passage au temps réel impose des règles de synchronisation strictes pour éviter les corruptions de données et les défauts de compilation.
+
+### 1. Le Piège de l'Asynchronisme (Uniform Staging Race)
+Dans Hypercube v6.0.6, `engine.dispatcher.dispatch(...)` est un appel asynchrone (`Promise<void>`).
+- **Le Risque** : Le **stagingBuffer** des Uniforms est un **singleton partagé** par le Dispatcher. Si vous lancez une série d'impulsions (ex: `applyImpulse`) sans utiliser `await`, les paramètres de la seconde impulsion écraseront ceux de la première dans la mémoire Host avant que le GPU n'ait pu traiter le premier transfert.
+- **Règle d'Audit** : "Toute commande de dispatch (transiente ou persistante) DOIT être précédée de **`await`** pour garantir l'isolation des données d'Uniforms."
+
+### 2. Le Mapping Sémantique Implicite (`get_params`)
+Le struct `SimulationParams` injecté dans le WGSL est un reflet strict et immuable de l'objet `config.params` présent dans le manifeste **au moment du boot**.
+- **Le Risque** : Si vous utilisez une variable dans votre kernel (ex: `p.ix`) qui n'était pas présente dans le manifeste initial, le mapping sémantique s'effondre (lecture de NaN ou décalage d'index).
+- **Règle d'Audit** : "Toute variable transiente ou paramètre dynamique DOIT être initialisé dans le manifeste (même à 0) pour stabiliser le layout mémoire `std140`."
+
+### 3. Cycle de Vie : `createSimulation()` vs `use()`
+La fonction `createSimulation()` assemble l'infrastructure mémoire (Buffers, BindGroups) mais **ne compile pas** les pipelines.
+- **Le Mécanisme** : Seul l'appel à `engine.use('NomRule', SRC)` déclenche la compilation JIT (Just-In-Time) des pipelines WebGPU.
+- **Règle d'Audit** : "L'enregistrement du code source dans le manifeste est une intention ; seul `engine.use()` déclenche la compilation réelle."
+
+### 4. Aide au Diagnostic (SOTA Hook)
+En cas de défaut de compilation ( syntaxe WGSL erronée), le framework v6.0.6 expose désormais les erreurs précises (ligne et message) directement dans la console grâce au hook implémenté dans `HypercubeGPUContext.ts`.
+
+---
+
 ## CONCLUSION : Synthèse et Instrumentation Host (TypeScript)
 
 ### 1. Vision Juxtaposée (Contrat vs Simulation)
