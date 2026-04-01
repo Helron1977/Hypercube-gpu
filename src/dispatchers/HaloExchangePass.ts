@@ -48,12 +48,12 @@ export class HaloExchangePass {
 
                 let axis = 0, srcPos = 0, dstPos = 0, size1 = 0, size2 = 0;
                 switch (joint.face) {
-                    case 'left': axis = 0; srcPos = 1; dstPos = dim.nx + 1; break;
-                    case 'right': axis = 0; srcPos = dim.nx; dstPos = 0; break;
-                    case 'bottom': axis = 1; srcPos = 1; dstPos = dim.ny + 1; break;
-                    case 'top': axis = 1; srcPos = dim.ny; dstPos = 0; break;
-                    case 'back': axis = 2; srcPos = 1; dstPos = (dim.nz || 1) + 1; break;
-                    case 'front': axis = 2; srcPos = (dim.nz || 1); dstPos = 0; break;
+                    case 'left': axis = 0; srcPos = neighbor.localDimensions.nx; dstPos = 0; break;
+                    case 'right': axis = 0; srcPos = 1; dstPos = dim.nx + 1; break;
+                    case 'bottom': axis = 1; srcPos = neighbor.localDimensions.ny; dstPos = 0; break;
+                    case 'top': axis = 1; srcPos = 1; dstPos = dim.ny + 1; break;
+                    case 'back': axis = 2; srcPos = neighbor.localDimensions.nz || 1; dstPos = 0; break;
+                    case 'front': axis = 2; srcPos = 1; dstPos = (dim.nz || 1) + 1; break;
                     default: continue;
                 }
                 if (axis === 0) { size1 = ly; size2 = lz; }
@@ -64,9 +64,7 @@ export class HaloExchangePass {
                     srcBase: neighborMeta.dataOffset / 4,
                     dstBase: meta.dataOffset / 4,
                     stride, lx, ly, lz, numFaces, axis,
-                    srcPos: (joint.face === 'left' || joint.face === 'bottom' || joint.face === 'back') ?
-                        (axis === 0 ? neighbor.localDimensions.nx : (axis === 1 ? neighbor.localDimensions.ny : neighbor.localDimensions.nz)) : 1,
-                    dstPos, size1, size2
+                    srcPos, dstPos, size1, size2
                 });
             }
         }
