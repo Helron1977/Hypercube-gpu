@@ -404,8 +404,12 @@
           <span style="font-size:13px;color:var(--text-secondary)">Persistent registration of WGSL kernels. Pre-compiles GPU pipelines once. To be called before the simulation loop.</span>
         </div>
         <div class="card" style="padding:1rem;margin:0">
-          <strong style="color:var(--accent)">4. engine.step(N) &amp; engine.params</strong><br>
-          <span style="font-size:13px;color:var(--text-secondary)">Execution of N GPU ticks. The Dispatcher uses pre-compiled pipelines — zero WGSL overhead in the hot path. Parameters are dynamically modifiable via the <code>engine.params</code> Proxy.</span>
+          <strong style="color:var(--accent)">4. engine.step(N) / executeTransient()</strong><br>
+          <span style="font-size:13px;color:var(--text-secondary)">Execution of N simulation steps. Use <code>executeTransient()</code> for one-shot impulses without parity rotation. Parameters are modifiable via the <code>engine.params</code> Proxy.</span>
+        </div>
+        <div class="card" style="padding:1rem;margin:0">
+          <strong style="color:var(--accent)">5. Data Interaction (injectData)</strong><br>
+          <span style="font-size:13px;color:var(--text-secondary)">Mid-simulation interaction via <code>injectData()</code>, targeting the current read-slot for temporal consistency.</span>
         </div>
       </div>
 
@@ -442,7 +446,7 @@
       <div class="tab-content on" id="t-full">
         <pre>{
   "name": "Core Simulation Baseline",
-  "version": "6.1.0",
+  "version": "6.0.6",
 
   "engine": {
     "name": "UniversalEngine",
@@ -460,9 +464,8 @@
       { "name": "forces", "type": "atomic_f32", "count": 2 }
     ],
 
-    // Physics: WGSL kernels to execute per step
     "rules": [
-      { "type": "collision", "source": "" }
+      { "type": "collision", "source": "", "entryPoint": "main" }
     ],
 
     "requirements": {
@@ -606,6 +609,17 @@ struct Uniforms {
   topRole: u32, bottomRole: u32, frontRole: u32, backRole: u32
 };
 
+// SimulationParams (v6.0.6 Semantic Aliasing)
+struct SimulationParams {
+  viscosity: f32,
+  gravity: f32,
+  // ... maps to p0..p7
+};
+
+fn get_params() -> SimulationParams {
+  return SimulationParams(uniforms.p0, uniforms.p1, ...);
+}
+
 // Indexing Helpers
 fn getIndex(x: u32, y: u32) -> u32
 fn getIndex3D(x: u32, y: u32, z: u32) -> u32
@@ -634,15 +648,13 @@ fn atomicAdd_global_forces(idx: u32, val: f32)  // idx=0 for Fx, idx=1 for Fy</p
       <pre>// In Manifest:
 "params": { "tau": 0.55, "ux0": 0.08, "reynolds": 1000.0 }
 
-// In WGSL — mapped by declaration order:
-let omega = 1.0 / uniforms.p0;   // tau    → p0
-let ux0   = uniforms.p1;          // ux0    → p1
-let re    = uniforms.p2;          // reynolds → p2
+// In WGSL (Idiomatic v6.0.6):
+let p = get_params();
+let omega = 1.0 / p.tau;
 
-// In TypeScript — Semantic control via Proxy:
-engine.params.tau = 0.6;              // Immediate update
-engine.params.set('ux0', 0.1);        // Fluent API
-await engine.step(1);                 // New values are active</pre>
+// In TypeScript — Semantic control:
+engine.params.tau = 0.6;
+await engine.executeTransient('Impulse', source, { tau: 0.9 }, 'apply_impulse');</pre>
 
       <div class="warn">Parameters are mapped by declaration order in <code>config.params</code>, not by name. <code>tau</code> is always <code>p0</code> because it was declared first.</div>
 

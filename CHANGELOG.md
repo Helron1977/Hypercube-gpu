@@ -1,3 +1,12 @@
+## [6.0.6] - 2026-04-01
+
+### Changed
+- **Semantic Struct Mapping (v2)** : Renamed `PhysicalParams` to `SimulationParams` to minimize naming collisions. 
+- **WGSL Global Conformity** : Moved parameter aliasing from illegal global `let` declarations to an idiomatic `get_params()` struct-mapping method. 
+
+### Added
+- **Feature Validation Suite** : Inclusion of `tests/unit/gpu_v6_dx_features.test.ts` as a permanent part of the regression suite.
+
 ## [6.0.5] - 2026-03-31
 
 ### Added
