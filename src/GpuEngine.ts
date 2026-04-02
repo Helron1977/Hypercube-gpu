@@ -114,6 +114,16 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
         await this.dispatcher.dispatch(this.parityManager.currentTick, kernels);
     }
 
+    /**
+     * Executes a one-shot kernel dispatch without advancing the simulation tick.
+     * v6.0.5: Added for initializations, diagnostics, or impulse injections.
+     */
+    public async executeTransient(name: string, source: string, overrides?: Record<string, number>): Promise<void> {
+        const header = this.dispatcher.getWgslHeader(name, source);
+        const combined = header.code + source;
+        await this.dispatcher.dispatchOneShot(combined, name, overrides);
+    }
+
     public getWgslHeader(ruleType: string): WgslHeaderResult {
         return this.dispatcher.getWgslHeader(ruleType);
     }
