@@ -9,3 +9,6 @@ walkthrough.md
 .version_history.md
 .agentrules
 .agent_behavior.md
+final_failures.json
+implementation_plan.md
+tmp_benchmark.ts

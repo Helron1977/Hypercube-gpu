@@ -45,18 +45,6 @@ export class GpuEngine<TParams extends Record<string, number> = any, TFaces = an
     }
 
     /**
-     * Executes a one-shot transient kernel without advancing the parity clock.
-     * Perfect for impulses, conditional resets, or selective data injection.
-     */
-    public async executeTransient(type: string, source: string, overrides?: Partial<TParams>, entryPoint: string = 'main'): Promise<void> {
-        const header = this.dispatcher.getWgslHeader(type, source);
-        const combined = header.code + "\n" + source;
-        const mergedParams = { ...this.persistentOverrides, ...overrides } as TParams;
-        
-        await this.dispatcher.dispatchOneShot(combined, type, mergedParams, entryPoint);
-    }
-
-    /**
      * Injects data directly into the current READ slot of a face.
      * Unlike setFaceData, this is intended for mid-simulation interaction
      * and correctly identifies the active parity slot before staging.

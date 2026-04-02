@@ -1,3 +1,14 @@
+# Changelog
+
+## [6.0.7] - 2026-04-01
+### Added
+- **SOTA Diagnostic Hook**: Detailed WGSL error reporting with line numbers and source snippets in `HypercubeGPUContext`.
+- **Joint-Buffer Protocol**: Official support for multi-engine composition (Triple-Stacking) on shared VRAM.
+
+### Fixed
+- **Halo Inversion**: Corrected topological mapping for X/Y/Z ghost cell exchanges in `HaloExchangePass`, fixing multi-chunk continuity.
+- **Mock Safety**: Hardened `getCompilationInfo` check to prevent test suite regressions in Node.js environments.
+
 ## [6.0.6] - 2026-04-01
 
 ### Changed

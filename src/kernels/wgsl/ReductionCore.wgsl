@@ -10,5 +10,5 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     // Sum from Face Slot defined by p0 (Direct Slot Pointer)
     let slotIdx = u32(uniforms.p0);
     let val = data[slotIdx * uniforms.strideFace + i];
-    atomicAdd(&results[0], i32(val * uniforms.p7));
+    atomicAdd(&results[0], i32(round(val * uniforms.p7)));
 }

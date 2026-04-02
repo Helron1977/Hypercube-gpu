@@ -42,6 +42,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         }
         write_ux_Next(px, py, 0.0);
         write_uy_Next(px, py, 0.0);
+        write_rho_Next(px, py, read_rho_Now(px, py));
+        write_curl_Next(px, py, 0.0);
         return;
     }
 
@@ -52,6 +54,10 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         for (var d = 0u; d < 9u; d = d + 1u) {
             write_f_Next(px, py, d, lbm_feq(rho_in, ux_in, 0.0, d));
         }
+        write_rho_Next(px, py, rho_in);
+        write_ux_Next(px, py, ux_in);
+        write_uy_Next(px, py, 0.0);
+        write_curl_Next(px, py, 0.0);
         return;
     }
     // Outflow (Right)
@@ -59,6 +65,10 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         for (var d = 0u; d < 9u; d = d + 1u) {
             write_f_Next(px, py, d, read_f_Now(nx - 2u, py, d));
         }
+        write_rho_Next(px, py, read_rho_Now(nx - 2u, py));
+        write_ux_Next(px, py, read_ux_Now(nx - 2u, py));
+        write_uy_Next(px, py, read_uy_Now(nx - 2u, py));
+        write_curl_Next(px, py, 0.0);
         return;
     }
 

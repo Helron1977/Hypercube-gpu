@@ -1,6 +1,6 @@
 {
   "name": "hypercube-gpu-core",
-  "version": "6.0.6",
+  "version": "6.0.7",
   "description": "Deterministic WebGPU compute core with Multi-Cube coupled physics support.",
   "type": "module",
   "main": "./dist/hypercube-gpu-core.js",
